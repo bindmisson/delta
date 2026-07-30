@@ -216,7 +216,7 @@ INDEX_CONFIG = {
         "CE_BIAS_PE_DISTANCE": 20,
         "PE_BIAS_CE_DISTANCE": 20,
         "PE_BIAS_PE_DISTANCE": 60,
-        "hedge_distance": 150,
+        "hedge_distance": 120,
         "be_buffer": 15,
         "expiry_be_buffer": 25,
         "profit_target_percent": 85,
@@ -341,9 +341,23 @@ def expiry_to_api_date(expiry_str):
     return day.strftime("%d-%m-%Y")
 
 
-def get_available_strikes(symbol, expiry):
-    """Listed call/put strikes for underlying + daily expiry."""
-    key = (symbol, expiry)
+def get_available_strikes(symbol, expiry, option_type=None):
+    """
+    Listed strikes for underlying + daily expiry.
+    option_type: CE/C → calls only, PE/P → puts only, None → both.
+    """
+    right = str(option_type or "").upper()
+    if right in ("CE", "C", "CALL"):
+        contract_types = "call_options"
+        side = "C"
+    elif right in ("PE", "P", "PUT"):
+        contract_types = "put_options"
+        side = "P"
+    else:
+        contract_types = "call_options,put_options"
+        side = "A"
+
+    key = (symbol, expiry, side)
     cached = STRIKE_CACHE.get(key)
     if cached:
         return cached
@@ -351,7 +365,7 @@ def get_available_strikes(symbol, expiry):
     api_date = expiry_to_api_date(expiry)
     path = (
         "/v2/tickers"
-        f"?contract_types=call_options,put_options"
+        f"?contract_types={contract_types}"
         f"&underlying_asset_symbols={symbol}"
         f"&expiry_date={api_date}"
     )
@@ -373,13 +387,21 @@ def get_available_strikes(symbol, expiry):
     return ordered
 
 
-def snap_strike(symbol, expiry, strike, prefer="nearest"):
+def snap_strike(
+    symbol,
+    expiry,
+    strike,
+    prefer="nearest",
+    option_type=None,
+):
     """
     Snap a theoretical strike onto a listed Delta strike.
     prefer: nearest | up | down
     """
     target = float(strike)
-    strikes = get_available_strikes(symbol, expiry)
+    strikes = get_available_strikes(
+        symbol, expiry, option_type=option_type
+    )
     if not strikes:
         return int(round(target))
 
@@ -399,12 +421,23 @@ def snap_strike(symbol, expiry, strike, prefer="nearest"):
     return int(round(best))
 
 
-
-def snap_candidate_list(symbol, expiry, candidates, prefer="nearest"):
+def snap_candidate_list(
+    symbol,
+    expiry,
+    candidates,
+    prefer="nearest",
+    option_type=None,
+):
     snapped = []
     seen = set()
     for c in candidates:
-        s = snap_strike(symbol, expiry, c, prefer=prefer)
+        s = snap_strike(
+            symbol,
+            expiry,
+            c,
+            prefer=prefer,
+            option_type=option_type,
+        )
         if s in seen:
             continue
         seen.add(s)
@@ -1521,12 +1554,14 @@ def create_condor(symbol, bias, spot, expiry=None):
         expiry,
         atm + ce_distance,
         prefer="up",
+        option_type="CE",
     )
     pe_short_strike = snap_strike(
         symbol,
         expiry,
         atm - pe_distance,
         prefer="down",
+        option_type="PE",
     )
 
     ce_buy_strike = snap_strike(
@@ -1534,12 +1569,14 @@ def create_condor(symbol, bias, spot, expiry=None):
         expiry,
         ce_short_strike + cfg["hedge_distance"],
         prefer="up",
+        option_type="CE",
     )
     pe_buy_strike = snap_strike(
         symbol,
         expiry,
         pe_short_strike - cfg["hedge_distance"],
         prefer="down",
+        option_type="PE",
     )
 
     ce_short_symbol = build_option_symbol(
@@ -1903,6 +1940,7 @@ def roll_ce_side(symbol):
                 new_ce_strike + (2 * step),
             ],
             prefer="up",
+            option_type="CE",
         )
 
         candidate_pe_list = snap_candidate_list(
@@ -1915,6 +1953,7 @@ def roll_ce_side(symbol):
                 new_pe_strike + (2 * step),
             ],
             prefer="down",
+            option_type="PE",
         )
 
         target_delta = 0
@@ -2578,6 +2617,7 @@ def roll_pe_side(symbol):
                 new_ce_strike + (2 * step),
             ],
             prefer="up",
+            option_type="CE",
         )
 
         candidate_pe_list = snap_candidate_list(
@@ -2590,6 +2630,7 @@ def roll_pe_side(symbol):
                 new_pe_strike + (2 * step),
             ],
             prefer="down",
+            option_type="PE",
         )
 
         target_delta = 0
