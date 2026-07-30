@@ -20,6 +20,7 @@
 import os
 import json
 import time
+import socket
 import pytz
 import logging
 import requests
@@ -40,6 +41,19 @@ except ImportError:  # pragma: no cover
     TimeInForce = None
 
 load_dotenv()
+
+# Delta API key whitelist is usually IPv4; Contabo egress prefers IPv6.
+# Force IPv4 DNS results so orders use 46.x instead of 2407:...
+_ORIG_GETADDRINFO = socket.getaddrinfo
+
+
+def _getaddrinfo_ipv4_first(host, port, family=0, type=0, proto=0, flags=0):
+    if family == 0:
+        family = socket.AF_INET
+    return _ORIG_GETADDRINFO(host, port, family, type, proto, flags)
+
+
+socket.getaddrinfo = _getaddrinfo_ipv4_first
 
 # ============================================================
 # APP
@@ -1627,14 +1641,33 @@ def create_condor(symbol, bias, spot, expiry=None, quantity=None):
     qty = resolve_lot_size(symbol, quantity)
     exchange = cfg["exchange"]
 
-    buy(exchange, ce_buy_symbol, qty)
-    time.sleep(CONFIG["API_DELAY"])
-    buy(exchange, pe_buy_symbol, qty)
-    time.sleep(CONFIG["API_DELAY"])
-    sell(exchange, ce_short_symbol, qty)
-    time.sleep(CONFIG["API_DELAY"])
-    sell(exchange, pe_short_symbol, qty)
-    time.sleep(CONFIG["API_DELAY"])
+    legs = [
+        ("buy", ce_buy_symbol),
+        ("buy", pe_buy_symbol),
+        ("sell", ce_short_symbol),
+        ("sell", pe_short_symbol),
+    ]
+    for action, opt_symbol in legs:
+        ok = (
+            buy(exchange, opt_symbol, qty)
+            if action == "buy"
+            else sell(exchange, opt_symbol, qty)
+        )
+        if not ok:
+            log_event(
+                "ERROR",
+                "ENTRY ORDER FAILED",
+                {
+                    "symbol": symbol,
+                    "action": action,
+                    "option": opt_symbol,
+                    "qty": qty,
+                },
+            )
+            raise RuntimeError(
+                f"order failed: {action} {opt_symbol} x{qty}"
+            )
+        time.sleep(CONFIG["API_DELAY"])
 
     ce_short = fetch_option_data(
         ce_short_symbol,
