@@ -37,14 +37,14 @@ Keep `DRY_RUN=true` until you verify strikes/orders in logs.
 python3 iron_condor.py
 ```
 
-Webhook listens on `http://0.0.0.0:8009`.
+Webhook listens on `http://0.0.0.0:9000` (public: `https://delta.spotfixcrew.com`).
 
 ## Webhook
 
 Bias only:
 
 ```bash
-curl -X POST http://127.0.0.1:8009/iron \
+curl -X POST https://delta.spotfixcrew.com/iron \
   -H 'Content-Type: application/json' \
   -d '{"symbol":"BTC","bias":"PE"}'
 ```
@@ -52,13 +52,13 @@ curl -X POST http://127.0.0.1:8009/iron \
 Enter iron condor (bot fetches live spot):
 
 ```bash
-curl -X POST http://127.0.0.1:8009/iron \
+curl -X POST https://delta.spotfixcrew.com/iron \
   -H 'Content-Type: application/json' \
   -d '{"symbol":"BTC","bias":"NONE","enter":true}'
 ```
 
 ```bash
-curl -X POST http://127.0.0.1:8009/iron \
+curl -X POST https://delta.spotfixcrew.com/iron \
   -H 'Content-Type: application/json' \
   -d '{"symbol":"ETH","bias":"CE","enter":true}'
 ```
@@ -66,8 +66,8 @@ curl -X POST http://127.0.0.1:8009/iron \
 Status:
 
 ```bash
-curl http://127.0.0.1:8009/positions
-curl http://127.0.0.1:8009/bias
+curl https://delta.spotfixcrew.com/positions
+curl https://delta.spotfixcrew.com/bias
 ```
 
 ## Default strike geometry

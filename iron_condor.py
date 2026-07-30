@@ -130,7 +130,7 @@ CONFIG = {
     "MARKET_START": "00:05",
     "MARKET_END": "17:25",
 
-    "WEBHOOK_PORT": int(os.getenv("WEBHOOK_PORT", "8009")),
+    "WEBHOOK_PORT": int(os.getenv("WEBHOOK_PORT", "9000")),
 }
 
 # ============================================================
@@ -3877,5 +3877,5 @@ if __name__ == "__main__":
     uvicorn.run(
         app,
         host="0.0.0.0",
-        port=CONFIG.get("WEBHOOK_PORT", 8009),
+        port=CONFIG.get("WEBHOOK_PORT", 9000),
     )
