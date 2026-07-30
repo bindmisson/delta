@@ -638,6 +638,7 @@ def reenter_full_condor(symbol, reason):
         },
     )
 
+    qty = position_lot_size(symbol, position)
     close_position(symbol)
     time.sleep(2)
 
@@ -659,7 +660,9 @@ def reenter_full_condor(symbol, reason):
 
     try:
         spot = get_live_spot(symbol)
-        create_condor(symbol, bias, spot)
+        create_condor(
+            symbol, bias, spot, quantity=qty
+        )
 
         log_event(
             "REENTER",
@@ -966,6 +969,9 @@ def arm_pending_next_week_roll(symbol, bias, closed_expiry, reason="EXPIRY_TARGE
     pending = {
         "bias": bias or "NONE",
         "closed_expiry": closed_expiry,
+        "lot_size": position_lot_size(
+            symbol, POSITIONS.get(symbol)
+        ),
         "armed_date": now_ist().date().isoformat(),
         "armed_at": now_ist().strftime("%Y-%m-%d %H:%M:%S"),
         "reason": reason,
@@ -1034,6 +1040,7 @@ def maybe_execute_pending_next_week(symbol):
         bias,
         spot,
         expiry=target_expiry,
+        quantity=pending.get("lot_size"),
     )
     return True
 
@@ -1141,6 +1148,7 @@ def shift_expiry_if_needed(symbol):
 
     spot = get_live_spot(symbol)
     bias = get_current_bias(symbol)
+    qty = position_lot_size(symbol, position)
 
     close_position(symbol)
 
@@ -1151,6 +1159,7 @@ def shift_expiry_if_needed(symbol):
         bias,
         spot,
         expiry=target_expiry,
+        quantity=qty,
     )
 
     return True
@@ -1503,7 +1512,30 @@ def get_adjustment_zone(
 # ============================================================
 
 
-def create_condor(symbol, bias, spot, expiry=None):
+def resolve_lot_size(symbol, quantity=None):
+    """contracts/qty override, else per-symbol default lot_size."""
+    if quantity is not None:
+        try:
+            qty = int(quantity)
+        except (TypeError, ValueError):
+            qty = 0
+        if qty > 0:
+            return qty
+    return int(INDEX_CONFIG[symbol]["lot_size"])
+
+
+def position_lot_size(symbol, position=None):
+    position = position or POSITIONS.get(symbol) or {}
+    try:
+        qty = int(position.get("lot_size") or 0)
+    except (TypeError, ValueError):
+        qty = 0
+    if qty > 0:
+        return qty
+    return int(INDEX_CONFIG[symbol]["lot_size"])
+
+
+def create_condor(symbol, bias, spot, expiry=None, quantity=None):
 
     cfg = INDEX_CONFIG[symbol]
 
@@ -1592,7 +1624,7 @@ def create_condor(symbol, bias, spot, expiry=None):
         symbol, expiry, pe_buy_strike, "PE"
     )
 
-    qty = cfg["lot_size"]
+    qty = resolve_lot_size(symbol, quantity)
     exchange = cfg["exchange"]
 
     buy(exchange, ce_buy_symbol, qty)
@@ -1652,6 +1684,7 @@ def create_condor(symbol, bias, spot, expiry=None):
         "expiry": expiry,
         "bias": bias,
         "spot": spot,
+        "lot_size": qty,
         "adjustments": 0,
         "last_adjustment": 0,
         # For day-based PNL ladder (₹1500 × day_n)
@@ -1714,9 +1747,7 @@ def close_position(symbol):
 
     exchange = position["exchange"]
 
-    qty = INDEX_CONFIG[symbol][
-        "lot_size"
-    ]
+    qty = position_lot_size(symbol, position)
 
     buy(
         exchange,
@@ -2267,7 +2298,7 @@ def roll_ce_side(symbol):
         if not buy(
             position["exchange"],
             old_ce["symbol"],
-            cfg["lot_size"]
+            position_lot_size(symbol, position)
         ):
             return
 
@@ -2276,7 +2307,7 @@ def roll_ce_side(symbol):
         if not buy(
             position["exchange"],
             old_pe["symbol"],
-            cfg["lot_size"]
+            position_lot_size(symbol, position)
         ):
             return
 
@@ -2289,7 +2320,7 @@ def roll_ce_side(symbol):
         if not sell(
             position["exchange"],
             new_ce_symbol,
-            cfg["lot_size"]
+            position_lot_size(symbol, position)
         ):
             return
 
@@ -2298,7 +2329,7 @@ def roll_ce_side(symbol):
         if not sell(
             position["exchange"],
             new_pe_symbol,
-            cfg["lot_size"]
+            position_lot_size(symbol, position)
         ):
             return
 
@@ -2928,7 +2959,7 @@ def roll_pe_side(symbol):
         if not buy(
             position["exchange"],
             old_pe["symbol"],
-            cfg["lot_size"]
+            position_lot_size(symbol, position)
         ):
             return
 
@@ -2937,7 +2968,7 @@ def roll_pe_side(symbol):
         if not buy(
             position["exchange"],
             old_ce["symbol"],
-            cfg["lot_size"]
+            position_lot_size(symbol, position)
         ):
             return
 
@@ -2946,7 +2977,7 @@ def roll_pe_side(symbol):
         if not sell(
             position["exchange"],
             new_pe_symbol,
-            cfg["lot_size"]
+            position_lot_size(symbol, position)
         ):
             return
 
@@ -2955,7 +2986,7 @@ def roll_pe_side(symbol):
         if not sell(
             position["exchange"],
             new_ce_symbol,
-            cfg["lot_size"]
+            position_lot_size(symbol, position)
         ):
             return
 
@@ -3116,6 +3147,7 @@ def recenter_condor(symbol, reason):
 
     spot = get_live_spot(symbol)
     bias = get_current_bias(symbol)
+    qty = position_lot_size(symbol, position)
 
     close_position(symbol)
 
@@ -3124,7 +3156,8 @@ def recenter_condor(symbol, reason):
     create_condor(
         symbol,
         bias,
-        spot
+        spot,
+        quantity=qty,
     )
 
     POSITIONS[symbol][
@@ -3437,9 +3470,7 @@ def monitor_symbol(symbol):
 
             if CONFIG.get("DAY_PNL_ENABLED"):
 
-                lot = INDEX_CONFIG[symbol][
-                    "lot_size"
-                ]
+                lot = position_lot_size(symbol, position)
                 pnl_rupee = captured * lot
                 day_target = get_day_pnl_target_rupee(
                     position
@@ -3865,9 +3896,11 @@ def iron(payload: dict):
 
     Optional force entry (bot fetches live spot):
       {"symbol":"BTC","bias":"PE","enter":true}
-      {"symbol":"ETH","bias":"CE","enter":true}
+      {"symbol":"ETH","bias":"CE","enter":true,"contracts":3}
+      {"symbol":"XAUT","bias":"NONE","enter":true,"qty":2}
 
-    Legacy: if price/close is present, also enters (still uses live spot).
+    contracts / qty / lot_size / quantity = contracts per leg.
+    If omitted, uses that symbol's default lot_size from env/config.
     """
 
     try:
@@ -3905,6 +3938,34 @@ def iron(payload: dict):
                 "spot": None,
             }
 
+        qty_raw = (
+            payload.get("contracts")
+            if payload.get("contracts") is not None
+            else payload.get("qty")
+            if payload.get("qty") is not None
+            else payload.get("lot_size")
+            if payload.get("lot_size") is not None
+            else payload.get("quantity")
+        )
+        quantity = None
+        if qty_raw is not None:
+            try:
+                quantity = int(qty_raw)
+            except (TypeError, ValueError):
+                return {
+                    "status": "error",
+                    "entered": False,
+                    "bias": bias,
+                    "message": "INVALID CONTRACTS",
+                }
+            if quantity <= 0:
+                return {
+                    "status": "error",
+                    "entered": False,
+                    "bias": bias,
+                    "message": "CONTRACTS MUST BE > 0",
+                }
+
         # Bot always detects live index price itself
         spot = get_live_spot(symbol)
         if not spot:
@@ -3922,7 +3983,8 @@ def iron(payload: dict):
         create_condor(
             symbol,
             bias,
-            float(spot)
+            float(spot),
+            quantity=quantity,
         )
 
         return {
@@ -3930,6 +3992,7 @@ def iron(payload: dict):
             "entered": True,
             "bias": bias,
             "spot": spot,
+            "contracts": POSITIONS[symbol].get("lot_size"),
             "position": POSITIONS[symbol],
         }
 
