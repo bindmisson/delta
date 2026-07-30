@@ -1,0 +1,6 @@
+delta-rest-client>=1.0.14
+fastapi>=0.110.0
+uvicorn>=0.27.0
+pytz>=2024.1
+python-dotenv>=1.0.0
+requests>=2.31.0

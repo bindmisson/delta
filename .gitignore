@@ -1,0 +1,9 @@
+.env
+__pycache__/
+*.pyc
+ic_engine.log*
+positions/*.json
+signals/*.json
+state/*.json
+*.log
+.DS_Store
