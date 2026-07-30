@@ -3,7 +3,7 @@
 # ============================================================
 # FEATURES
 # ------------------------------------------------------------
-# ✅ BTC + ETH options (Delta Exchange India)
+# ✅ BTC + ETH + XAUT options (Delta Exchange India)
 # ✅ Daily expiry @ 17:30 IST
 # ✅ Net Delta Risk Engine
 # ✅ Expiry Day Mode
@@ -139,13 +139,19 @@ CONFIG = {
 
 INDEX_CONFIG = {
 
+    # Each underlying has fully independent geometry / clocks / risk knobs.
     "BTC": {
         "exchange": "DELTA",
         "underlying_symbol": "BTCUSD",
         "strike_step": 200,
         "lot_size": int(os.getenv("BTC_LOT_SIZE", "1")),
-        # Daily expiry
         "expiry_day": "daily",
+        # Clocks (IST) — Delta BTC/ETH daily settle 17:30
+        "settlement_time": "17:30",
+        "market_start": "00:05",
+        "market_end": "17:25",
+        "expiry_switch_time": "12:55",
+        # Wing geometry
         "ce_distance": 400,
         "pe_distance": 400,
         "CE_BIAS_CE_DISTANCE": 600,
@@ -153,8 +159,16 @@ INDEX_CONFIG = {
         "PE_BIAS_CE_DISTANCE": 200,
         "PE_BIAS_PE_DISTANCE": 600,
         "hedge_distance": 2000,
+        # Risk / exits
         "be_buffer": 150,
         "expiry_be_buffer": 250,
+        "profit_target_percent": 85,
+        "expiry_profit_target_percent": 80,
+        "day_pnl_base": float(os.getenv("BTC_DAY_PNL_BASE", "15")),
+        "tsl_start": 70,
+        "tsl_lock": 50,
+        "tsl_step": 5,
+        "startup_delay": 0,
     },
 
     "ETH": {
@@ -163,6 +177,10 @@ INDEX_CONFIG = {
         "strike_step": 10,
         "lot_size": int(os.getenv("ETH_LOT_SIZE", "1")),
         "expiry_day": "daily",
+        "settlement_time": "17:30",
+        "market_start": "00:05",
+        "market_end": "17:25",
+        "expiry_switch_time": "12:55",
         "ce_distance": 20,
         "pe_distance": 20,
         "CE_BIAS_CE_DISTANCE": 30,
@@ -172,6 +190,42 @@ INDEX_CONFIG = {
         "hedge_distance": 100,
         "be_buffer": 8,
         "expiry_be_buffer": 12,
+        "profit_target_percent": 85,
+        "expiry_profit_target_percent": 80,
+        "day_pnl_base": float(os.getenv("ETH_DAY_PNL_BASE", "8")),
+        "tsl_start": 70,
+        "tsl_lock": 50,
+        "tsl_step": 5,
+        "startup_delay": 5,
+    },
+
+    "XAUT": {
+        "exchange": "DELTA",
+        "underlying_symbol": "XAUTUSD",
+        "strike_step": 10,
+        "lot_size": int(os.getenv("XAUT_LOT_SIZE", "1")),
+        "expiry_day": "daily",
+        # Delta XAUT daily settle 21:30 IST
+        "settlement_time": "21:30",
+        "market_start": "00:05",
+        "market_end": "21:25",
+        "expiry_switch_time": "16:55",
+        "ce_distance": 40,
+        "pe_distance": 40,
+        "CE_BIAS_CE_DISTANCE": 60,
+        "CE_BIAS_PE_DISTANCE": 20,
+        "PE_BIAS_CE_DISTANCE": 20,
+        "PE_BIAS_PE_DISTANCE": 60,
+        "hedge_distance": 150,
+        "be_buffer": 15,
+        "expiry_be_buffer": 25,
+        "profit_target_percent": 85,
+        "expiry_profit_target_percent": 80,
+        "day_pnl_base": float(os.getenv("XAUT_DAY_PNL_BASE", "5")),
+        "tsl_start": 70,
+        "tsl_lock": 50,
+        "tsl_step": 5,
+        "startup_delay": 10,
     },
 }
 
@@ -248,11 +302,33 @@ def parse_expiry(expiry_str):
     return datetime.strptime(expiry_str, "%d%m%y").date()
 
 
-def settlement_time():
-    return datetime.strptime(
-        CONFIG["EXPIRY_SETTLEMENT_TIME"],
-        "%H:%M",
-    ).time()
+def symbol_cfg(symbol):
+    return INDEX_CONFIG[symbol]
+
+
+def cfg_time(symbol, key, fallback_key=None):
+    raw = INDEX_CONFIG[symbol].get(key)
+    if not raw and fallback_key:
+        raw = CONFIG.get(fallback_key)
+    return datetime.strptime(raw, "%H:%M").time()
+
+
+def settlement_time(symbol):
+    return cfg_time(
+        symbol,
+        "settlement_time",
+        "EXPIRY_SETTLEMENT_TIME",
+    )
+
+
+def market_window(symbol):
+    start = INDEX_CONFIG[symbol].get(
+        "market_start", CONFIG["MARKET_START"]
+    )
+    end = INDEX_CONFIG[symbol].get(
+        "market_end", CONFIG["MARKET_END"]
+    )
+    return start, end
 
 
 def round_to_step(price, step):
@@ -374,17 +450,19 @@ def calculate_net_delta(position):
     )
 
 
-def get_tsl_tier_for_peak(peak):
-    start = CONFIG.get("TSL_START")
-    lock_base = CONFIG.get("TSL_LOCK")
-    step_inc = CONFIG.get("TSL_STEP")
+def get_tsl_tier_for_peak(peak, symbol=None):
+    cfg = INDEX_CONFIG.get(symbol or "", {})
+    start = cfg.get("tsl_start", CONFIG.get("TSL_START"))
+    lock_base = cfg.get("tsl_lock", CONFIG.get("TSL_LOCK"))
+    step_inc = cfg.get("tsl_step", CONFIG.get("TSL_STEP"))
     if start is None or lock_base is None or step_inc is None:
         return None, None
     if step_inc <= 0:
         return None, None
 
-    profit_cap = CONFIG.get(
-        "PROFIT_TARGET_PERCENT", 100
+    profit_cap = cfg.get(
+        "profit_target_percent",
+        CONFIG.get("PROFIT_TARGET_PERCENT", 100),
     )
     active_step = None
     lock = None
@@ -406,7 +484,10 @@ def get_tsl_tier_for_peak(peak):
 
 def update_trailing_stop_from_steps(position):
     peak = position.get("max_capture_percent", 0) or 0
-    active_step, lock = get_tsl_tier_for_peak(peak)
+    active_step, lock = get_tsl_tier_for_peak(
+        peak,
+        position.get("symbol"),
+    )
     if lock is None:
         return
 
@@ -475,14 +556,21 @@ def get_day_pnl_day_number(position):
 
 def get_day_pnl_target_rupee(position):
     """
-    Day N target ₹ = DAY_PNL_BASE_RUPEE * N.
-    Returns (target_rupee, day_n) or None if exit should not fire.
+    Day N target = per-symbol day_pnl_base * N.
+    Returns (target, day_n) or None if exit should not fire.
     """
     day_n = get_day_pnl_day_number(position)
     if day_n <= 0:
         return None
 
-    base = float(CONFIG.get("DAY_PNL_BASE_RUPEE", 1500) or 0)
+    symbol = position.get("symbol")
+    cfg = INDEX_CONFIG.get(symbol or "", {})
+    base = float(
+        cfg.get(
+            "day_pnl_base",
+            CONFIG.get("DAY_PNL_BASE_RUPEE", 0),
+        ) or 0
+    )
     if base <= 0:
         return None
 
@@ -528,7 +616,7 @@ def reenter_full_condor(symbol, reason):
         )
         return True
 
-    if not is_market_open():
+    if not is_market_open(symbol):
         log_event(
             "REENTER",
             "MARKET CLOSED — RE-ENTRY SKIPPED",
@@ -832,11 +920,12 @@ def load_pending_rolls():
             )
 
 
-def get_switch_time():
-    return datetime.strptime(
-        CONFIG["EXPIRY_NEXT_WEEK_TIME"],
-        "%H:%M",
-    ).time()
+def get_switch_time(symbol):
+    return cfg_time(
+        symbol,
+        "expiry_switch_time",
+        "EXPIRY_NEXT_WEEK_TIME",
+    )
 
 
 def arm_pending_next_week_roll(symbol, bias, closed_expiry, reason="EXPIRY_TARGET_BEFORE_ROLL"):
@@ -875,7 +964,7 @@ def maybe_execute_pending_next_week(symbol):
         clear_pending_roll(symbol)
         return False
 
-    if now.time() < get_switch_time():
+    if now.time() < get_switch_time(symbol):
         return False
 
     position = POSITIONS.get(symbol) or {}
@@ -916,15 +1005,22 @@ def maybe_execute_pending_next_week(symbol):
     return True
 
 
-def is_market_open():
-    """Open until MARKET_END IST (before 17:30 settlement)."""
+def is_market_open(symbol=None):
+    """
+    Per-symbol market window (IST), ending before that
+    symbol's settlement clock.
+    """
     now = now_ist()
     current = now.strftime("%H:%M")
-    return (
-        CONFIG["MARKET_START"]
-        <= current
-        <= CONFIG["MARKET_END"]
-    )
+
+    if symbol is None:
+        return any(
+            is_market_open(sym)
+            for sym in INDEX_CONFIG.keys()
+        )
+
+    start, end = market_window(symbol)
+    return start <= current <= end
 
 
 # ============================================================
@@ -951,7 +1047,7 @@ def get_nearest_expiry(symbol):
     now = now_ist()
     today = now.date()
 
-    if now.time() >= settlement_time():
+    if now.time() >= settlement_time(symbol):
         day = previous_trading_day(
             today + timedelta(days=1)
         )
@@ -1035,10 +1131,7 @@ def get_active_expiry(symbol):
 
     expiry_date = parse_expiry(current_expiry)
 
-    switch_time = datetime.strptime(
-        CONFIG["EXPIRY_NEXT_WEEK_TIME"],
-        "%H:%M"
-    ).time()
+    switch_time = get_switch_time(symbol)
 
     # ====================================================
     # EXPIRY DAY AFTER 1PM
@@ -3022,17 +3115,16 @@ def monitor_symbol(symbol):
 
 
 
-    startup_delay = {
-        "BTC": 0,
-        "ETH": 5,
-    }.get(symbol, 0)
+    startup_delay = INDEX_CONFIG[symbol].get(
+        "startup_delay", 0
+    )
 
     time.sleep(startup_delay)
     while True:
 
         try:
 
-            if not is_market_open():
+            if not is_market_open(symbol):
                 time.sleep(10)
                 continue
 
@@ -3335,9 +3427,14 @@ def monitor_symbol(symbol):
                                     target_rupee,
                                     2
                                 ),
-                                "base_rupee": CONFIG.get(
-                                    "DAY_PNL_BASE_RUPEE",
-                                    1500,
+                                "base_rupee": INDEX_CONFIG[
+                                    symbol
+                                ].get(
+                                    "day_pnl_base",
+                                    CONFIG.get(
+                                        "DAY_PNL_BASE_RUPEE",
+                                        0,
+                                    ),
                                 ),
                                 "capture_percent": round(
                                     capture_percent,
@@ -3361,14 +3458,19 @@ def monitor_symbol(symbol):
             # EXPIRY TARGET
             # ====================================================
 
+            cfg = INDEX_CONFIG[symbol]
             profit_target = (
-                CONFIG[
-                    "EXPIRY_PROFIT_TARGET_PERCENT"
-                ]
+                cfg.get(
+                    "expiry_profit_target_percent",
+                    CONFIG[
+                        "EXPIRY_PROFIT_TARGET_PERCENT"
+                    ],
+                )
                 if dte < 1
-                else CONFIG[
-                    "PROFIT_TARGET_PERCENT"
-                ]
+                else cfg.get(
+                    "profit_target_percent",
+                    CONFIG["PROFIT_TARGET_PERCENT"],
+                )
             )
 
             # ====================================================
@@ -3826,7 +3928,18 @@ def health():
             symbol: get_active_expiry(symbol)
             for symbol in INDEX_CONFIG.keys()
         },
-        "settlement_ist": CONFIG["EXPIRY_SETTLEMENT_TIME"],
+        "settlement_ist": {
+            symbol: INDEX_CONFIG[symbol].get(
+                "settlement_time"
+            )
+            for symbol in INDEX_CONFIG.keys()
+        },
+        "market_end": {
+            symbol: INDEX_CONFIG[symbol].get(
+                "market_end"
+            )
+            for symbol in INDEX_CONFIG.keys()
+        },
     }
 
 
@@ -3870,7 +3983,12 @@ if __name__ == "__main__":
                 and CONFIG.get("DELTA_API_SECRET")
             ),
             "symbols": list(INDEX_CONFIG.keys()),
-            "settlement": CONFIG["EXPIRY_SETTLEMENT_TIME"],
+            "settlement": {
+                symbol: INDEX_CONFIG[symbol].get(
+                    "settlement_time"
+                )
+                for symbol in INDEX_CONFIG.keys()
+            },
         },
     )
 
