@@ -37,11 +37,11 @@ Keep `DRY_RUN=true` until you verify strikes/orders in logs.
 python3 iron_condor.py
 ```
 
-Webhook listens on `http://0.0.0.0:9000` (public: `https://delta.spotopscrew.com`).
+Webhook listens on `http://0.0.0.0:9000` (public: `https://delta.spotfixcrew.com`).
 
 ## Dashboard UI (auth required)
 
-Open **https://delta.spotopscrew.com/** — SpotFix-style login + ops dashboard:
+Open **https://delta.spotfixcrew.com/** — SpotFix-style login + ops dashboard:
 
 - Overview: spot, bias, enter/close per symbol (no greek fields)
 - Settings: global + BTC/ETH/XAUT knobs (`hedge_distance` must be a multiple of `strike_step`)
@@ -60,7 +60,7 @@ Strategy engine knobs are not exposed. Session cookie auth protects `/api/*`, `/
 Bias only:
 
 ```bash
-curl -X POST https://delta.spotopscrew.com/iron \
+curl -X POST https://delta.spotfixcrew.com/iron \
   -H 'Content-Type: application/json' \
   -d '{"symbol":"BTC","bias":"PE"}'
 ```
@@ -68,13 +68,13 @@ curl -X POST https://delta.spotopscrew.com/iron \
 Enter iron condor (bot fetches live spot):
 
 ```bash
-curl -X POST https://delta.spotopscrew.com/iron \
+curl -X POST https://delta.spotfixcrew.com/iron \
   -H 'Content-Type: application/json' \
   -d '{"symbol":"BTC","bias":"NONE","enter":true}'
 ```
 
 ```bash
-curl -X POST https://delta.spotopscrew.com/iron \
+curl -X POST https://delta.spotfixcrew.com/iron \
   -H 'Content-Type: application/json' \
   -d '{"symbol":"ETH","bias":"CE","enter":true}'
 ```
@@ -82,8 +82,8 @@ curl -X POST https://delta.spotopscrew.com/iron \
 Status:
 
 ```bash
-curl https://delta.spotopscrew.com/positions
-curl https://delta.spotopscrew.com/bias
+curl https://delta.spotfixcrew.com/positions
+curl https://delta.spotfixcrew.com/bias
 ```
 
 ## Per-symbol settings (`INDEX_CONFIG`)
