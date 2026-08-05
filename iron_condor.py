@@ -272,7 +272,7 @@ SETTINGS_PATH = Path(
 )
 SETTINGS_LOCK = Lock()
 
-# Keys editable via UI / API (secrets are write-only on GET)
+# Keys editable via settings file / internal apply
 CONFIG_SETTING_KEYS = [
     "DRY_RUN",
     "DELTA_BASE_URL",
@@ -315,7 +315,40 @@ CONFIG_SETTING_KEYS = [
     "WEBHOOK_PORT",
 ]
 
+# Never expose greek / risk-engine knobs on user-facing UI/API
+STRATEGY_CONFIG_KEYS = {
+    "DELTA_PREPARE",
+    "DELTA_ADJUST",
+    "DELTA_AGGRESSIVE",
+    "DELTA_PANIC",
+    "EXPIRY_DELTA_PREPARE",
+    "EXPIRY_DELTA_ADJUST",
+    "EXPIRY_DELTA_AGGRESSIVE",
+    "EXPIRY_DELTA_PANIC",
+    "PANIC_GAMMA",
+    "EXPIRY_PANIC_GAMMA",
+}
+
+PUBLIC_CONFIG_SETTING_KEYS = [
+    k for k in CONFIG_SETTING_KEYS if k not in STRATEGY_CONFIG_KEYS
+]
+
 CONFIG_SECRET_KEYS = {"DELTA_API_KEY", "DELTA_API_SECRET"}
+
+# Fields stripped from user-facing position payloads
+PUBLIC_STRIP_FIELDS = {
+    "delta",
+    "gamma",
+    "theta",
+    "vega",
+    "rho",
+    "iv",
+    "mark_iv",
+    "implied_volatility",
+    "greeks",
+    "net_delta",
+    "net_gamma",
+}
 
 INDEX_SETTING_KEYS = [
     "exchange",
@@ -344,6 +377,16 @@ INDEX_SETTING_KEYS = [
     "tsl_step",
     "startup_delay",
 ]
+
+INDEX_DISTANCE_KEYS = (
+    "ce_distance",
+    "pe_distance",
+    "CE_BIAS_CE_DISTANCE",
+    "CE_BIAS_PE_DISTANCE",
+    "PE_BIAS_CE_DISTANCE",
+    "PE_BIAS_PE_DISTANCE",
+    "hedge_distance",
+)
 
 # ============================================================
 # HOLIDAYS
@@ -401,10 +444,81 @@ def _coerce_setting_value(key, value, reference):
     return str(value)
 
 
-def snapshot_settings(mask_secrets=True):
-    config = {k: CONFIG.get(k) for k in CONFIG_SETTING_KEYS if k in CONFIG}
+def validate_distance_multiples(symbol, cfg=None):
+    """
+    hedge_distance (and other strike offsets) must be multiples of strike_step.
+    Returns error string or None.
+    """
+    cfg = cfg if cfg is not None else INDEX_CONFIG[symbol]
+    try:
+        step = int(cfg["strike_step"])
+    except (TypeError, ValueError):
+        return f"{symbol}: strike_step must be an integer"
+    if step <= 0:
+        return f"{symbol}: strike_step must be > 0"
+
+    for key in INDEX_DISTANCE_KEYS:
+        if key not in cfg:
+            continue
+        try:
+            val = int(cfg[key])
+        except (TypeError, ValueError):
+            return f"{symbol}.{key} must be an integer"
+        if val < 0:
+            return f"{symbol}.{key} must be >= 0"
+        if key == "hedge_distance" and val <= 0:
+            return f"{symbol}.hedge_distance must be > 0"
+        if val % step != 0:
+            return (
+                f"{symbol}.{key}={val} must be a multiple of "
+                f"strike_step={step}"
+            )
+    return None
+
+
+def hedge_distance_for(symbol):
+    """Return hedge_distance snapped to a positive multiple of strike_step."""
+    cfg = INDEX_CONFIG[symbol]
+    step = int(cfg["strike_step"])
+    hedge = int(cfg["hedge_distance"])
+    if step <= 0:
+        return max(hedge, 0)
+    if hedge <= 0:
+        return step
+    if hedge % step != 0:
+        hedge = int(round(hedge / float(step))) * step
+        if hedge <= 0:
+            hedge = step
+        cfg["hedge_distance"] = hedge
+    return hedge
+
+
+def public_sanitize(obj):
+    """Deep-copy structure with greek / strategy fields removed."""
+    if isinstance(obj, dict):
+        out = {}
+        for k, v in obj.items():
+            lk = str(k).lower()
+            if k in PUBLIC_STRIP_FIELDS or lk in PUBLIC_STRIP_FIELDS:
+                continue
+            if "delta" in lk or "gamma" in lk:
+                continue
+            out[k] = public_sanitize(v)
+        return out
+    if isinstance(obj, list):
+        return [public_sanitize(x) for x in obj]
+    return obj
+
+
+def snapshot_settings(mask_secrets=True, public=False):
+    keys = (
+        PUBLIC_CONFIG_SETTING_KEYS if public else CONFIG_SETTING_KEYS
+    )
+    config = {k: CONFIG.get(k) for k in keys if k in CONFIG}
     if mask_secrets:
         for k in CONFIG_SECRET_KEYS:
+            if k not in config:
+                continue
             if config.get(k):
                 config[k] = "••••••••"
             else:
@@ -429,73 +543,88 @@ def snapshot_settings(mask_secrets=True):
     return {"config": config, "index": index, "meta": meta}
 
 
-def apply_settings_payload(payload, persist=True):
+def apply_settings_payload(payload, persist=True, allow_strategy=True):
     """
     Merge payload into live CONFIG / INDEX_CONFIG.
     Returns (ok, message, snapshot).
+    When allow_strategy is False (user API), greek knobs are ignored.
     """
     global DELTA_CLIENT
 
     if not isinstance(payload, dict):
-        return False, "INVALID PAYLOAD", snapshot_settings()
+        return False, "INVALID PAYLOAD", snapshot_settings(public=True)
 
     config_in = payload.get("config") or {}
     index_in = payload.get("index") or {}
     if config_in and not isinstance(config_in, dict):
-        return False, "INVALID CONFIG", snapshot_settings()
+        return False, "INVALID CONFIG", snapshot_settings(public=True)
     if index_in and not isinstance(index_in, dict):
-        return False, "INVALID INDEX", snapshot_settings()
+        return False, "INVALID INDEX", snapshot_settings(public=True)
 
-    with SETTINGS_LOCK:
-        keys_changed = False
+    public_view = not allow_strategy
+
+    # Stage changes first so validation can reject without mutating live state
+    staged_config = {}
+    staged_index = {}
+    try:
         for key, raw in config_in.items():
             if key not in CONFIG_SETTING_KEYS:
                 continue
-            if key in CONFIG_SECRET_KEYS:
-                if raw in (None, "", "••••••••"):
-                    continue
+            if not allow_strategy and key in STRATEGY_CONFIG_KEYS:
+                continue
+            if key in CONFIG_SECRET_KEYS and raw in (None, "", "••••••••"):
+                continue
             if key not in CONFIG:
                 continue
-            try:
-                CONFIG[key] = _coerce_setting_value(
-                    key, raw, DEFAULT_CONFIG.get(key, CONFIG[key])
-                )
-            except (TypeError, ValueError) as e:
-                return False, f"BAD VALUE {key}: {e}", snapshot_settings()
-            if key in CONFIG_SECRET_KEYS:
-                keys_changed = True
+            staged_config[key] = _coerce_setting_value(
+                key, raw, DEFAULT_CONFIG.get(key, CONFIG[key])
+            )
 
         for symbol, patch in index_in.items():
-            if symbol not in INDEX_CONFIG:
+            if symbol not in INDEX_CONFIG or not isinstance(patch, dict):
                 continue
-            if not isinstance(patch, dict):
-                continue
+            staged_index[symbol] = {}
             for key, raw in patch.items():
                 if key not in INDEX_SETTING_KEYS:
                     continue
                 if key not in INDEX_CONFIG[symbol]:
                     continue
-                try:
-                    INDEX_CONFIG[symbol][key] = _coerce_setting_value(
-                        key,
-                        raw,
-                        DEFAULT_INDEX_CONFIG[symbol].get(
-                            key, INDEX_CONFIG[symbol][key]
-                        ),
-                    )
-                except (TypeError, ValueError) as e:
-                    return (
-                        False,
-                        f"BAD VALUE {symbol}.{key}: {e}",
-                        snapshot_settings(),
-                    )
+                staged_index[symbol][key] = _coerce_setting_value(
+                    key,
+                    raw,
+                    DEFAULT_INDEX_CONFIG[symbol].get(
+                        key, INDEX_CONFIG[symbol][key]
+                    ),
+                )
+    except (TypeError, ValueError) as e:
+        return False, f"BAD VALUE: {e}", snapshot_settings(public=public_view)
+
+    # Validate distance multiples against staged + current merge
+    for symbol in INDEX_CONFIG:
+        merged = dict(INDEX_CONFIG[symbol])
+        merged.update(staged_index.get(symbol) or {})
+        err = validate_distance_multiples(symbol, merged)
+        if err:
+            return False, err, snapshot_settings(public=public_view)
+
+    with SETTINGS_LOCK:
+        keys_changed = False
+        for key, val in staged_config.items():
+            CONFIG[key] = val
+            if key in CONFIG_SECRET_KEYS:
+                keys_changed = True
+
+        for symbol, patch in staged_index.items():
+            INDEX_CONFIG[symbol].update(patch)
 
         if keys_changed:
             DELTA_CLIENT = None
 
         if persist:
             SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
-            to_store = snapshot_settings(mask_secrets=False)
+            to_store = snapshot_settings(
+                mask_secrets=False, public=False
+            )
             # Don't persist masked placeholders
             for k in CONFIG_SECRET_KEYS:
                 val = to_store["config"].get(k)
@@ -519,18 +648,12 @@ def apply_settings_payload(payload, persist=True):
         log_event(
             "SETTINGS",
             "UPDATED",
-            {
-                "persist": persist,
-                "delta_adjust": CONFIG.get("DELTA_ADJUST"),
-                "expiry_delta_adjust": CONFIG.get(
-                    "EXPIRY_DELTA_ADJUST"
-                ),
-            },
+            {"persist": persist},
         )
     except Exception:
         pass
 
-    return True, "OK", snapshot_settings()
+    return True, "OK", snapshot_settings(public=public_view)
 
 
 def load_settings():
@@ -542,7 +665,9 @@ def load_settings():
     except Exception as e:
         logger.info("SETTINGS LOAD FAILED: %s", e)
         return
-    ok, msg, _ = apply_settings_payload(data, persist=False)
+    ok, msg, _ = apply_settings_payload(
+        data, persist=False, allow_strategy=True
+    )
     if ok:
         logger.info("SETTINGS LOADED from %s", SETTINGS_PATH)
     else:
@@ -565,7 +690,7 @@ def reset_settings_to_defaults():
         log_event("SETTINGS", "RESET TO DEFAULTS")
     except Exception:
         pass
-    return snapshot_settings()
+    return snapshot_settings(public=True)
 
 
 # ============================================================
@@ -1908,17 +2033,18 @@ def create_condor(symbol, bias, spot, expiry=None, quantity=None):
         # Force identical ATM short strikes
         pe_short_strike = ce_short_strike
 
+    hedge = hedge_distance_for(symbol)
     ce_buy_strike = snap_strike(
         symbol,
         expiry,
-        ce_short_strike + cfg["hedge_distance"],
+        ce_short_strike + hedge,
         prefer="up",
         option_type="CE",
     )
     pe_buy_strike = snap_strike(
         symbol,
         expiry,
-        pe_short_strike - cfg["hedge_distance"],
+        pe_short_strike - hedge,
         prefer="down",
         option_type="PE",
     )
@@ -4324,7 +4450,7 @@ def iron(payload: dict):
             "bias": bias,
             "spot": spot,
             "contracts": POSITIONS[symbol].get("lot_size"),
-            "position": POSITIONS[symbol],
+            "position": public_sanitize(POSITIONS[symbol]),
         }
 
     except Exception as e:
@@ -4342,7 +4468,7 @@ def iron(payload: dict):
 
 @app.get("/positions")
 def positions():
-    return POSITIONS
+    return public_sanitize(POSITIONS)
 
 
 @app.get("/bias")
@@ -4398,7 +4524,7 @@ def ui_page():
 
 @app.get("/api/settings")
 def get_settings():
-    snap = snapshot_settings(mask_secrets=True)
+    snap = snapshot_settings(mask_secrets=True, public=True)
     return {
         "status": "ok",
         "config": snap["config"],
@@ -4409,7 +4535,9 @@ def get_settings():
 
 @app.put("/api/settings")
 def put_settings(payload: dict):
-    ok, msg, snap = apply_settings_payload(payload, persist=True)
+    ok, msg, snap = apply_settings_payload(
+        payload, persist=True, allow_strategy=False
+    )
     if not ok:
         return {
             "status": "error",

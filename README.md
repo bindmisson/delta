@@ -43,10 +43,10 @@ Webhook listens on `http://0.0.0.0:9000` (public: `https://delta.spotopscrew.com
 
 Open **https://delta.spotopscrew.com/** (or `http://HOST:9000/`) for a live settings panel covering:
 
-- Global risk knobs (delta zones, BE buffers, TP %, day-PnL, TSL, clocks)
+- Global ops knobs (BE buffers, TP %, day-PnL, TSL, clocks, API)
 - Per-symbol geometry (BTC / ETH / XAUT lot size, strikes, hedges, bias distances)
 
-Saves to `state/settings.json` and applies **live** to the running process (no restart for most knobs). API:
+`hedge_distance` and other strike offsets must be multiples of `strike_step`. Strategy engine knobs are not exposed in the UI. Saves to `state/settings.json` and applies **live**. API:
 
 ```bash
 curl https://delta.spotopscrew.com/api/settings

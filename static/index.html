@@ -256,7 +256,7 @@
 <body>
   <header>
     <div class="brand">
-      <h1>DELTA IRON CONDOR</h1>
+      <h1>IC CONTROL</h1>
       <span>live settings · no restart for most knobs</span>
     </div>
     <div class="actions">
@@ -285,9 +285,9 @@
           title: "Mode & API",
           fields: [
             { key: "DRY_RUN", type: "bool", label: "DRY_RUN", hint: "Log orders only — no live sends" },
-            { key: "DELTA_BASE_URL", type: "text", label: "DELTA_BASE_URL" },
-            { key: "DELTA_API_KEY", type: "secret", label: "DELTA_API_KEY" },
-            { key: "DELTA_API_SECRET", type: "secret", label: "DELTA_API_SECRET" },
+            { key: "DELTA_BASE_URL", type: "text", label: "Exchange API URL" },
+            { key: "DELTA_API_KEY", type: "secret", label: "API Key" },
+            { key: "DELTA_API_SECRET", type: "secret", label: "API Secret" },
             { key: "API_DELAY", type: "number", step: 0.1, label: "API_DELAY" },
             { key: "API_RETRY", type: "number", step: 1, label: "API_RETRY" },
             { key: "API_RETRY_DELAY", type: "number", step: 0.1, label: "API_RETRY_DELAY" },
@@ -303,28 +303,8 @@
           ],
         },
         {
-          title: "Delta zones (non-expiry)",
+          title: "Breakeven / profit",
           fields: [
-            { key: "DELTA_PREPARE", type: "number", step: 0.01 },
-            { key: "DELTA_ADJUST", type: "number", step: 0.01, hint: "Roll gate + monitor adjust" },
-            { key: "DELTA_AGGRESSIVE", type: "number", step: 0.01 },
-            { key: "DELTA_PANIC", type: "number", step: 0.01 },
-          ],
-        },
-        {
-          title: "Delta zones (expiry day)",
-          fields: [
-            { key: "EXPIRY_DELTA_PREPARE", type: "number", step: 0.01 },
-            { key: "EXPIRY_DELTA_ADJUST", type: "number", step: 0.01 },
-            { key: "EXPIRY_DELTA_AGGRESSIVE", type: "number", step: 0.01 },
-            { key: "EXPIRY_DELTA_PANIC", type: "number", step: 0.01 },
-          ],
-        },
-        {
-          title: "Gamma / breakeven / profit",
-          fields: [
-            { key: "PANIC_GAMMA", type: "number", step: 0.0001 },
-            { key: "EXPIRY_PANIC_GAMMA", type: "number", step: 0.0001 },
             { key: "BREAKEVEN_BUFFER", type: "number", step: 1 },
             { key: "EXPIRY_BE_BUFFER", type: "number", step: 1 },
             { key: "PROFIT_TARGET_PERCENT", type: "number", step: 1 },
@@ -361,14 +341,14 @@
           title: "Size & geometry",
           fields: [
             { key: "lot_size", type: "number", step: 1 },
-            { key: "strike_step", type: "number", step: 1 },
-            { key: "ce_distance", type: "number", step: 1 },
-            { key: "pe_distance", type: "number", step: 1 },
-            { key: "hedge_distance", type: "number", step: 1 },
-            { key: "CE_BIAS_CE_DISTANCE", type: "number", step: 1 },
-            { key: "CE_BIAS_PE_DISTANCE", type: "number", step: 1 },
-            { key: "PE_BIAS_CE_DISTANCE", type: "number", step: 1 },
-            { key: "PE_BIAS_PE_DISTANCE", type: "number", step: 1 },
+            { key: "strike_step", type: "number", step: 1, hint: "Strike grid step" },
+            { key: "ce_distance", type: "number", step: 1, hint: "Multiple of strike_step" },
+            { key: "pe_distance", type: "number", step: 1, hint: "Multiple of strike_step" },
+            { key: "hedge_distance", type: "number", step: 1, hint: "Must be a multiple of strike_step" },
+            { key: "CE_BIAS_CE_DISTANCE", type: "number", step: 1, hint: "Multiple of strike_step" },
+            { key: "CE_BIAS_PE_DISTANCE", type: "number", step: 1, hint: "Multiple of strike_step" },
+            { key: "PE_BIAS_CE_DISTANCE", type: "number", step: 1, hint: "Multiple of strike_step" },
+            { key: "PE_BIAS_PE_DISTANCE", type: "number", step: 1, hint: "Multiple of strike_step" },
           ],
         },
         {
@@ -397,6 +377,12 @@
         },
       ],
     };
+
+    const DISTANCE_KEYS = [
+      "ce_distance", "pe_distance", "hedge_distance",
+      "CE_BIAS_CE_DISTANCE", "CE_BIAS_PE_DISTANCE",
+      "PE_BIAS_CE_DISTANCE", "PE_BIAS_PE_DISTANCE",
+    ];
 
     let state = null;
     let meta = null;
@@ -473,9 +459,8 @@
       const dry = state.config.DRY_RUN;
       document.getElementById("statusBar").innerHTML = `
         <div class="stat"><label>Mode</label><strong class="${dry ? "on" : "off"}">${dry ? "DRY RUN" : "LIVE"}</strong></div>
-        <div class="stat"><label>Δ adjust</label><strong>${state.config.DELTA_ADJUST}</strong></div>
-        <div class="stat"><label>Expiry Δ adjust</label><strong>${state.config.EXPIRY_DELTA_ADJUST}</strong></div>
         <div class="stat"><label>TP %</label><strong>${state.config.PROFIT_TARGET_PERCENT}</strong></div>
+        <div class="stat"><label>BE buffer</label><strong>${state.config.BREAKEVEN_BUFFER}</strong></div>
         <div class="stat"><label>Symbols</label><strong>${symbols.join(" · ")}</strong></div>
       `;
       document.getElementById("footer").textContent =
@@ -515,6 +500,17 @@
             if (v !== undefined) index[s][f.key] = v;
           }
         }
+        const step = Number(index[s].strike_step);
+        if (Number.isFinite(step) && step > 0) {
+          for (const key of DISTANCE_KEYS) {
+            if (index[s][key] == null) continue;
+            const val = Number(index[s][key]);
+            if (!Number.isFinite(val)) continue;
+            if (val % step !== 0) {
+              throw new Error(`${s}.${key}=${val} must be a multiple of strike_step=${step}`);
+            }
+          }
+        }
       }
       return { config, index };
     }
@@ -534,7 +530,13 @@
       toast("saving…");
       document.getElementById("btnSave").disabled = true;
       try {
-        const body = collectPayload();
+        let body;
+        try {
+          body = collectPayload();
+        } catch (ve) {
+          toast(String(ve.message || ve), "err");
+          return;
+        }
         const res = await fetch("/api/settings", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
