@@ -1,27 +1,30 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>DELTA IC — Settings</title>
+  <meta name="theme-color" content="#050505" />
+  <title>SpotFix IC</title>
+  <link rel="icon" href="/static/logo.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --bg: #0e1210;
-      --panel: #161c18;
-      --panel2: #1c241e;
-      --line: #2a342c;
-      --text: #e6ede7;
-      --muted: #8a9a8e;
-      --accent: #3dba7a;
-      --accent-dim: #2a7a52;
-      --warn: #d4a017;
-      --danger: #e05a4f;
-      --input: #0b0f0c;
-      --radius: 8px;
-      --font: "IBM Plex Sans", system-ui, sans-serif;
+      --bg: #050505;
+      --bg2: #0c0c0c;
+      --panel: #111111;
+      --panel2: #171717;
+      --line: #262626;
+      --text: #f5f5f5;
+      --muted: #a3a3a3;
+      --primary: #22c55e;
+      --primary-dim: #16a34a;
+      --warn: #eab308;
+      --danger: #ef4444;
+      --input: #0a0a0a;
+      --radius: 12px;
+      --font: "Manrope", system-ui, sans-serif;
       --mono: "IBM Plex Mono", ui-monospace, monospace;
     }
     * { box-sizing: border-box; }
@@ -31,76 +34,158 @@
       font-family: var(--font);
       color: var(--text);
       background:
-        radial-gradient(900px 420px at 10% -10%, #1a2e22 0%, transparent 55%),
-        radial-gradient(700px 380px at 100% 0%, #1a2218 0%, transparent 50%),
+        radial-gradient(900px 480px at 15% -10%, rgba(34,197,94,0.12), transparent 55%),
+        radial-gradient(700px 400px at 90% 0%, rgba(255,255,255,0.04), transparent 50%),
         var(--bg);
     }
-    header {
+    button, input, select { font-family: inherit; }
+    button {
+      border: 1px solid var(--line);
+      background: var(--panel2);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 9px 14px;
+      font-weight: 600;
+      font-size: 0.875rem;
+      cursor: pointer;
+    }
+    button.primary {
+      background: var(--primary);
+      border-color: var(--primary-dim);
+      color: #052e16;
+    }
+    button.danger { background: #3f1212; border-color: #7f1d1d; color: #fecaca; }
+    button.ghost { background: transparent; }
+    button:hover { filter: brightness(1.06); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .hidden { display: none !important; }
+
+    /* LOGIN */
+    #view-login {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .login-wrap {
+      width: min(1040px, 100%);
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 28px;
+      align-items: center;
+    }
+    @media (max-width: 860px) {
+      .login-wrap { grid-template-columns: 1fr; }
+      .login-hero { order: 2; text-align: center; }
+    }
+    .login-hero h1 {
+      margin: 0 0 14px;
+      font-size: clamp(2rem, 4vw, 3rem);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+    }
+    .login-hero h1 span { color: var(--primary); }
+    .login-hero p {
+      margin: 0 0 18px;
+      color: var(--muted);
+      font-size: 1.05rem;
+      line-height: 1.55;
+      max-width: 36ch;
+    }
+    .login-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 28px 24px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.45);
+    }
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .brand-row img { width: 40px; height: 40px; border-radius: 10px; }
+    .brand-row strong { font-size: 1.1rem; }
+    .brand-row span { display: block; color: var(--muted); font-size: 0.8rem; }
+    .field { margin-bottom: 14px; }
+    .field label {
+      display: block;
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+    .field input, .field select {
+      width: 100%;
+      background: var(--input);
+      border: 1px solid var(--line);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 0.95rem;
+    }
+    .field input:focus, .field select:focus {
+      outline: 1px solid var(--primary-dim);
+      border-color: var(--primary-dim);
+    }
+    .err {
+      background: rgba(239,68,68,0.12);
+      border: 1px solid rgba(239,68,68,0.35);
+      color: #fecaca;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 0.85rem;
+      margin-bottom: 12px;
+    }
+    .hint-box {
+      margin-top: 14px;
+      padding: 12px;
+      border-radius: 8px;
+      background: rgba(34,197,94,0.08);
+      border: 1px solid rgba(34,197,94,0.2);
+      color: #bbf7d0;
+      font-size: 0.82rem;
+      line-height: 1.4;
+    }
+
+    /* APP SHELL */
+    #view-app { min-height: 100vh; display: flex; flex-direction: column; }
+    .topbar {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      padding: 18px 22px;
+      padding: 14px 20px;
       border-bottom: 1px solid var(--line);
-      background: rgba(14, 18, 16, 0.85);
-      backdrop-filter: blur(8px);
+      background: rgba(5,5,5,0.9);
+      backdrop-filter: blur(10px);
       position: sticky;
       top: 0;
-      z-index: 10;
+      z-index: 20;
     }
-    .brand {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
+    .top-brand { display: flex; align-items: center; gap: 10px; }
+    .top-brand img { width: 32px; height: 32px; border-radius: 8px; }
+    .top-brand strong { font-size: 1rem; }
+    .top-brand small { color: var(--muted); font-size: 0.75rem; display: block; }
+    .nav { display: flex; gap: 6px; flex-wrap: wrap; }
+    .nav button.active {
+      background: rgba(34,197,94,0.15);
+      border-color: rgba(34,197,94,0.4);
+      color: #bbf7d0;
     }
-    .brand h1 {
-      margin: 0;
-      font-size: 1.15rem;
-      letter-spacing: 0.04em;
-      font-weight: 700;
-    }
-    .brand span {
-      color: var(--muted);
-      font-size: 0.78rem;
-      font-family: var(--mono);
-    }
-    .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-    button, .btn {
-      font-family: var(--font);
-      font-weight: 600;
-      font-size: 0.85rem;
-      border: 1px solid var(--line);
-      background: var(--panel2);
-      color: var(--text);
-      border-radius: 6px;
-      padding: 8px 14px;
-      cursor: pointer;
-    }
-    button.primary {
-      background: var(--accent);
-      border-color: var(--accent-dim);
-      color: #04120a;
-    }
-    button.ghost:hover, button.primary:hover { filter: brightness(1.08); }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-    #toast {
-      font-family: var(--mono);
-      font-size: 0.75rem;
-      color: var(--muted);
-      min-width: 140px;
-      text-align: right;
-    }
-    #toast.ok { color: var(--accent); }
+    .top-actions { display: flex; align-items: center; gap: 8px; }
+    #toast { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); min-width: 120px; text-align: right; }
+    #toast.ok { color: var(--primary); }
     #toast.err { color: var(--danger); }
-    main {
-      max-width: 1180px;
-      margin: 0 auto;
-      padding: 18px 18px 48px;
-    }
-    .status-bar {
+    main { width: min(1200px, 100%); margin: 0 auto; padding: 20px 16px 48px; flex: 1; }
+
+    .stats {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
       gap: 10px;
       margin-bottom: 16px;
     }
@@ -108,7 +193,7 @@
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: var(--radius);
-      padding: 12px 14px;
+      padding: 14px;
     }
     .stat label {
       display: block;
@@ -116,167 +201,195 @@
       font-size: 0.7rem;
       text-transform: uppercase;
       letter-spacing: 0.06em;
-      margin-bottom: 4px;
+      margin-bottom: 6px;
+      font-weight: 700;
     }
-    .stat strong {
-      font-family: var(--mono);
-      font-size: 0.95rem;
-      font-weight: 500;
+    .stat strong { font-family: var(--mono); font-size: 1rem; font-weight: 500; }
+    .stat strong.live { color: var(--primary); }
+    .stat strong.dry { color: var(--warn); }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 12px;
     }
-    .stat strong.on { color: var(--warn); }
-    .stat strong.off { color: var(--accent); }
-    .tabs {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-bottom: 14px;
-    }
-    .tabs button {
-      background: transparent;
-      border-color: transparent;
-      color: var(--muted);
-    }
-    .tabs button.active {
-      background: var(--panel);
-      border-color: var(--line);
-      color: var(--text);
-    }
-    .panel {
-      display: none;
+    .card {
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: var(--radius);
-      padding: 8px 4px 16px;
+      padding: 16px;
     }
-    .panel.active { display: block; }
+    .card h3 {
+      margin: 0 0 4px;
+      font-size: 1.05rem;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+    }
+    .badge {
+      font-size: 0.68rem;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    .badge.on { color: #bbf7d0; border-color: rgba(34,197,94,0.4); background: rgba(34,197,94,0.12); }
+    .badge.off { color: var(--muted); }
+    .meta {
+      color: var(--muted);
+      font-size: 0.8rem;
+      font-family: var(--mono);
+      margin-bottom: 12px;
+      line-height: 1.5;
+    }
+    .legs {
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      color: #d4d4d4;
+      background: var(--bg2);
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 12px;
+      line-height: 1.55;
+    }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; }
+    .row .grow { flex: 1; min-width: 90px; }
     .section-title {
-      margin: 16px 14px 8px;
-      font-size: 0.72rem;
+      margin: 8px 0 12px;
+      font-size: 0.75rem;
       text-transform: uppercase;
       letter-spacing: 0.08em;
       color: var(--muted);
+      font-weight: 700;
     }
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
       gap: 10px;
-      padding: 0 12px;
     }
-    .field {
+    .sfield {
       background: var(--panel2);
       border: 1px solid var(--line);
-      border-radius: 6px;
+      border-radius: 8px;
       padding: 10px 12px;
     }
-    .field label {
+    .sfield label {
       display: block;
       font-size: 0.72rem;
       color: var(--muted);
       margin-bottom: 6px;
       font-family: var(--mono);
     }
-    .field .hint {
-      margin-top: 5px;
-      font-size: 0.68rem;
-      color: #6a7a6e;
-      line-height: 1.3;
-    }
-    .field input[type="text"],
-    .field input[type="number"],
-    .field input[type="password"],
-    .field select {
-      width: 100%;
-      background: var(--input);
-      border: 1px solid var(--line);
-      color: var(--text);
-      border-radius: 4px;
-      padding: 7px 9px;
-      font-family: var(--mono);
-      font-size: 0.85rem;
-    }
-    .field input:focus, .field select:focus {
-      outline: 1px solid var(--accent-dim);
-      border-color: var(--accent-dim);
-    }
-    .toggle-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-    }
-    .switch {
-      position: relative;
-      width: 42px;
-      height: 24px;
-      flex-shrink: 0;
-    }
+    .sfield .hint { margin-top: 5px; font-size: 0.68rem; color: #737373; }
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .switch { position: relative; width: 42px; height: 24px; flex-shrink: 0; }
     .switch input { opacity: 0; width: 0; height: 0; }
     .switch span {
-      position: absolute;
-      inset: 0;
-      background: #2a322c;
-      border-radius: 999px;
-      cursor: pointer;
-      transition: 0.15s;
+      position: absolute; inset: 0; background: #262626; border-radius: 999px; cursor: pointer;
     }
     .switch span::before {
-      content: "";
-      position: absolute;
-      width: 18px;
-      height: 18px;
-      left: 3px;
-      top: 3px;
-      background: #c5d0c8;
-      border-radius: 50%;
-      transition: 0.15s;
+      content: ""; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px;
+      background: #d4d4d4; border-radius: 50%; transition: 0.15s;
     }
-    .switch input:checked + span { background: var(--accent-dim); }
-    .switch input:checked + span::before {
-      transform: translateX(18px);
-      background: #e8fff0;
+    .switch input:checked + span { background: var(--primary-dim); }
+    .switch input:checked + span::before { transform: translateX(18px); background: #ecfdf5; }
+    .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .tabs button.active {
+      background: rgba(34,197,94,0.15);
+      border-color: rgba(34,197,94,0.35);
+      color: #bbf7d0;
     }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; justify-content: flex-end; }
     .note {
-      margin: 14px 14px 0;
-      padding: 10px 12px;
+      margin-top: 14px;
+      padding: 12px;
       border-left: 3px solid var(--warn);
-      background: rgba(212, 160, 23, 0.08);
-      color: #d8c48a;
-      font-size: 0.78rem;
+      background: rgba(234,179,8,0.08);
+      color: #fde68a;
+      font-size: 0.8rem;
       line-height: 1.4;
-    }
-    footer {
-      margin-top: 18px;
-      color: var(--muted);
-      font-size: 0.72rem;
-      font-family: var(--mono);
-      text-align: center;
     }
   </style>
 </head>
 <body>
-  <header>
-    <div class="brand">
-      <h1>IC CONTROL</h1>
-      <span>live settings · no restart for most knobs</span>
+  <!-- LOGIN -->
+  <div id="view-login">
+    <div class="login-wrap">
+      <div class="login-hero">
+        <h1>Welcome to <span>SpotFix IC</span></h1>
+        <p>Sign in to monitor positions, set bias, enter or flatten iron condors, and manage live ops settings.</p>
+        <div class="hint-box">Operator access only. Strategy internals stay on the engine.</div>
+      </div>
+      <div class="login-card">
+        <div class="brand-row">
+          <img src="/static/logo.png" alt="SpotFix" />
+          <div>
+            <strong>SpotFixAlgo</strong>
+            <span>Iron Condor control</span>
+          </div>
+        </div>
+        <div id="loginErr" class="err hidden"></div>
+        <form id="loginForm">
+          <div class="field">
+            <label for="username">Username</label>
+            <input id="username" name="username" autocomplete="username" required />
+          </div>
+          <div class="field">
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password" autocomplete="current-password" required />
+          </div>
+          <button class="primary" style="width:100%" type="submit" id="btnLogin">Sign in</button>
+        </form>
+      </div>
     </div>
-    <div class="actions">
-      <span id="toast">—</span>
-      <button class="ghost" type="button" id="btnReload">Reload</button>
-      <button class="ghost" type="button" id="btnReset">Reset defaults</button>
-      <button class="primary" type="button" id="btnSave">Save</button>
-    </div>
-  </header>
+  </div>
 
-  <main>
-    <div class="status-bar" id="statusBar"></div>
-    <div class="tabs" id="tabs"></div>
-    <div id="panels"></div>
-    <p class="note">
-      API keys are write-only here (masked on load). Leave blank to keep the current secret.
-      Changing <code>WEBHOOK_PORT</code> needs a process restart. Geometry changes apply to the next roll / entry.
-    </p>
-    <footer id="footer"></footer>
-  </main>
+  <!-- APP -->
+  <div id="view-app" class="hidden">
+    <header class="topbar">
+      <div class="top-brand">
+        <img src="/static/logo.png" alt="" />
+        <div>
+          <strong>SpotFix IC</strong>
+          <small id="userLabel">signed in</small>
+        </div>
+      </div>
+      <nav class="nav">
+        <button type="button" data-view="overview" class="active">Overview</button>
+        <button type="button" data-view="settings">Settings</button>
+      </nav>
+      <div class="top-actions">
+        <span id="toast">—</span>
+        <button type="button" class="ghost" id="btnRefresh">Refresh</button>
+        <button type="button" class="ghost" id="btnLogout">Logout</button>
+      </div>
+    </header>
+    <main>
+      <section id="page-overview">
+        <div class="stats" id="overviewStats"></div>
+        <div class="cards" id="symbolCards"></div>
+      </section>
+
+      <section id="page-settings" class="hidden">
+        <div class="toolbar">
+          <button type="button" class="ghost" id="btnReloadSettings">Reload</button>
+          <button type="button" class="ghost" id="btnResetSettings">Reset defaults</button>
+          <button type="button" class="primary" id="btnSaveSettings">Save</button>
+        </div>
+        <div class="tabs" id="settingsTabs"></div>
+        <div id="settingsPanels"></div>
+        <p class="note">
+          API keys are write-only (leave blank to keep). Distances must be multiples of strike_step.
+          WEBHOOK_PORT changes need a process restart.
+        </p>
+      </section>
+    </main>
+  </div>
 
   <script>
     const SCHEMA = {
@@ -284,14 +397,14 @@
         {
           title: "Mode & API",
           fields: [
-            { key: "DRY_RUN", type: "bool", label: "DRY_RUN", hint: "Log orders only — no live sends" },
+            { key: "DRY_RUN", type: "bool", hint: "Log orders only — no live sends" },
             { key: "DELTA_BASE_URL", type: "text", label: "Exchange API URL" },
             { key: "DELTA_API_KEY", type: "secret", label: "API Key" },
             { key: "DELTA_API_SECRET", type: "secret", label: "API Secret" },
-            { key: "API_DELAY", type: "number", step: 0.1, label: "API_DELAY" },
-            { key: "API_RETRY", type: "number", step: 1, label: "API_RETRY" },
-            { key: "API_RETRY_DELAY", type: "number", step: 0.1, label: "API_RETRY_DELAY" },
-            { key: "WEBHOOK_PORT", type: "number", step: 1, label: "WEBHOOK_PORT", hint: "Needs restart" },
+            { key: "API_DELAY", type: "number", step: 0.1 },
+            { key: "API_RETRY", type: "number", step: 1 },
+            { key: "API_RETRY_DELAY", type: "number", step: 0.1 },
+            { key: "WEBHOOK_PORT", type: "number", step: 1, hint: "Needs restart" },
           ],
         },
         {
@@ -377,21 +490,204 @@
         },
       ],
     };
-
     const DISTANCE_KEYS = [
       "ce_distance", "pe_distance", "hedge_distance",
       "CE_BIAS_CE_DISTANCE", "CE_BIAS_PE_DISTANCE",
       "PE_BIAS_CE_DISTANCE", "PE_BIAS_PE_DISTANCE",
     ];
 
-    let state = null;
-    let meta = null;
+    let settingsState = null;
+    let settingsMeta = null;
+    let dashTimer = null;
 
+    const $ = (id) => document.getElementById(id);
     const toast = (msg, kind) => {
-      const el = document.getElementById("toast");
+      const el = $("toast");
+      if (!el) return;
       el.textContent = msg;
       el.className = kind || "";
     };
+
+    async function api(path, opts = {}) {
+      const res = await fetch(path, {
+        credentials: "include",
+        headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
+        ...opts,
+      });
+      let data = null;
+      try { data = await res.json(); } catch (_) { data = {}; }
+      if (res.status === 401 && !path.startsWith("/api/auth/")) {
+        showLogin("Session expired — sign in again");
+        throw new Error("UNAUTHORIZED");
+      }
+      return { res, data };
+    }
+
+    function showLogin(err) {
+      $("view-app").classList.add("hidden");
+      $("view-login").classList.remove("hidden");
+      if (dashTimer) { clearInterval(dashTimer); dashTimer = null; }
+      const box = $("loginErr");
+      if (err) {
+        box.textContent = err;
+        box.classList.remove("hidden");
+      } else {
+        box.classList.add("hidden");
+      }
+    }
+
+    function showApp(user) {
+      $("view-login").classList.add("hidden");
+      $("view-app").classList.remove("hidden");
+      $("userLabel").textContent = user ? `signed in as ${user}` : "signed in";
+      switchPage("overview");
+      loadDashboard();
+      if (dashTimer) clearInterval(dashTimer);
+      dashTimer = setInterval(loadDashboard, 15000);
+    }
+
+    function switchPage(name) {
+      document.querySelectorAll(".nav button").forEach((b) => {
+        b.classList.toggle("active", b.dataset.view === name);
+      });
+      $("page-overview").classList.toggle("hidden", name !== "overview");
+      $("page-settings").classList.toggle("hidden", name !== "settings");
+      if (name === "settings" && !settingsState) loadSettings().catch((e) => toast(String(e.message || e), "err"));
+    }
+
+    document.querySelectorAll(".nav button").forEach((b) => {
+      b.onclick = () => switchPage(b.dataset.view);
+    });
+
+    async function checkAuth() {
+      const { data } = await api("/api/auth/status");
+      if (!data.auth_configured) {
+        showLogin("Set UI_USERNAME / UI_PASSWORD in server .env, then restart.");
+        return;
+      }
+      if (data.authenticated) showApp(data.user);
+      else showLogin();
+    }
+
+    $("loginForm").onsubmit = async (e) => {
+      e.preventDefault();
+      $("btnLogin").disabled = true;
+      try {
+        const { res, data } = await api("/api/auth/login", {
+          method: "POST",
+          body: JSON.stringify({
+            username: $("username").value.trim(),
+            password: $("password").value,
+          }),
+        });
+        if (!res.ok || data.status === "error") {
+          showLogin(data.message || "Login failed");
+          return;
+        }
+        $("password").value = "";
+        showApp(data.user);
+        toast("signed in", "ok");
+      } catch (err) {
+        showLogin(String(err.message || err));
+      } finally {
+        $("btnLogin").disabled = false;
+      }
+    };
+
+    $("btnLogout").onclick = async () => {
+      await api("/api/auth/logout", { method: "POST" });
+      showLogin();
+      toast("logged out");
+    };
+    $("btnRefresh").onclick = () => {
+      if (!$("page-overview").classList.contains("hidden")) loadDashboard();
+      else loadSettings().catch((e) => toast(String(e.message || e), "err"));
+    };
+
+    async function loadDashboard() {
+      try {
+        const { res, data } = await api("/api/dashboard");
+        if (!res.ok) throw new Error(data.message || "dashboard failed");
+        const syms = data.symbols || {};
+        const activeN = Object.values(syms).filter((s) => s.active).length;
+        $("overviewStats").innerHTML = `
+          <div class="stat"><label>Mode</label><strong class="${data.dry_run ? "dry" : "live"}">${data.dry_run ? "DRY RUN" : "LIVE"}</strong></div>
+          <div class="stat"><label>Active</label><strong>${activeN} / ${Object.keys(syms).length}</strong></div>
+          <div class="stat"><label>IST</label><strong>${data.time_ist || "—"}</strong></div>
+          <div class="stat"><label>Engine</label><strong class="live">ONLINE</strong></div>
+        `;
+        $("symbolCards").innerHTML = Object.entries(syms).map(([sym, s]) => {
+          const legs = s.legs || {};
+          const legLines = ["ce_short", "pe_short", "ce_buy", "pe_buy"]
+            .map((k) => {
+              const L = legs[k];
+              if (!L || !L.symbol) return null;
+              return `${k}: ${L.symbol}`;
+            })
+            .filter(Boolean)
+            .join("<br>");
+          return `<div class="card" data-sym="${sym}">
+            <h3>${sym} <span class="badge ${s.active ? "on" : "off"}">${s.active ? "ACTIVE" : "FLAT"}</span></h3>
+            <div class="meta">
+              spot ${s.spot != null ? Number(s.spot).toFixed(2) : "—"} · bias ${s.bias || "NONE"} · expiry ${s.expiry || "—"} · lots ${s.lot_size ?? "—"}
+              ${s.active ? `<br>credit ${s.entry_credit ?? "—"} · BE ${s.lower_be ?? "—"} / ${s.upper_be ?? "—"} · adj ${s.adjustments || 0}` : ""}
+            </div>
+            ${s.active && legLines ? `<div class="legs">${legLines}</div>` : ""}
+            <div class="row">
+              <select class="grow" id="bias-${sym}">
+                <option value="NONE" ${s.bias === "NONE" ? "selected" : ""}>NONE</option>
+                <option value="CE" ${s.bias === "CE" ? "selected" : ""}>CE</option>
+                <option value="PE" ${s.bias === "PE" ? "selected" : ""}>PE</option>
+              </select>
+              <input class="grow" id="qty-${sym}" type="number" min="1" step="1" value="${s.lot_size || 1}" title="contracts" />
+            </div>
+            <div class="row" style="margin-top:8px">
+              <button type="button" data-act="bias" data-sym="${sym}">Set bias</button>
+              <button type="button" class="primary" data-act="enter" data-sym="${sym}">Enter</button>
+              <button type="button" class="danger" data-act="close" data-sym="${sym}" ${s.active ? "" : "disabled"}>Close</button>
+            </div>
+          </div>`;
+        }).join("");
+
+        $("symbolCards").onclick = async (ev) => {
+          const btn = ev.target.closest("button[data-act]");
+          if (!btn) return;
+          const sym = btn.dataset.sym;
+          const act = btn.dataset.act;
+          const bias = $(`bias-${sym}`).value;
+          const qty = Number($(`qty-${sym}`).value);
+          btn.disabled = true;
+          try {
+            if (act === "bias") {
+              const { data: d } = await api("/api/bias", { method: "POST", body: JSON.stringify({ symbol: sym, bias }) });
+              if (d.status === "error") throw new Error(d.message);
+              toast(`${sym} bias ${d.bias}`, "ok");
+            } else if (act === "enter") {
+              if (!confirm(`Enter ${sym} iron condor? bias=${bias} qty=${qty}`)) return;
+              const { data: d } = await api("/api/enter", {
+                method: "POST",
+                body: JSON.stringify({ symbol: sym, bias, contracts: qty }),
+              });
+              if (d.status === "error") throw new Error(d.message);
+              toast(`${sym} entered`, "ok");
+            } else if (act === "close") {
+              if (!confirm(`Close ${sym} position?`)) return;
+              const { data: d } = await api("/api/close", { method: "POST", body: JSON.stringify({ symbol: sym }) });
+              if (d.status === "error") throw new Error(d.message);
+              toast(`${sym} closed`, "ok");
+            }
+            await loadDashboard();
+          } catch (e) {
+            if (String(e.message) !== "UNAUTHORIZED") toast(String(e.message || e), "err");
+          } finally {
+            btn.disabled = false;
+          }
+        };
+        toast("overview · live", "ok");
+      } catch (e) {
+        if (String(e.message) !== "UNAUTHORIZED") toast(String(e.message || e), "err");
+      }
+    }
 
     const fieldId = (scope, key) => `${scope}__${key}`;
 
@@ -399,72 +695,49 @@
       const id = fieldId(scope, f.key);
       const label = f.label || f.key;
       if (f.type === "bool") {
-        const checked = !!value ? "checked" : "";
-        return `<div class="field">
-          <div class="toggle-row">
-            <label for="${id}">${label}</label>
-            <label class="switch"><input type="checkbox" id="${id}" ${checked} /><span></span></label>
-          </div>
-          ${f.hint ? `<div class="hint">${f.hint}</div>` : ""}
-        </div>`;
+        return `<div class="sfield"><div class="toggle-row"><label for="${id}">${label}</label>
+          <label class="switch"><input type="checkbox" id="${id}" ${value ? "checked" : ""} /><span></span></label></div>
+          ${f.hint ? `<div class="hint">${f.hint}</div>` : ""}</div>`;
       }
       if (f.type === "secret") {
-        return `<div class="field">
-          <label for="${id}">${label}</label>
+        return `<div class="sfield"><label for="${id}">${label}</label>
           <input type="password" id="${id}" value="" placeholder="${value || "••••••••"}" autocomplete="off" />
-          <div class="hint">${f.hint || "Leave blank to keep current"}</div>
-        </div>`;
+          <div class="hint">${f.hint || "Leave blank to keep current"}</div></div>`;
       }
       const step = f.step != null ? `step="${f.step}"` : "";
       const inputType = f.type === "number" ? "number" : "text";
       const v = value == null ? "" : value;
-      return `<div class="field">
-        <label for="${id}">${label}</label>
+      return `<div class="sfield"><label for="${id}">${label}</label>
         <input type="${inputType}" id="${id}" value="${String(v).replace(/"/g, "&quot;")}" ${step} />
-        ${f.hint ? `<div class="hint">${f.hint}</div>` : ""}
-      </div>`;
+        ${f.hint ? `<div class="hint">${f.hint}</div>` : ""}</div>`;
     }
 
     function renderSections(scope, sections, data) {
       return sections.map((sec) => `
         <div class="section-title">${sec.title}</div>
-        <div class="grid">
-          ${sec.fields.map((f) => renderField(scope, f, data[f.key])).join("")}
-        </div>
+        <div class="grid">${sec.fields.map((f) => renderField(scope, f, data[f.key])).join("")}</div>
       `).join("");
     }
 
-    function buildUI() {
-      const symbols = meta.symbols || ["BTC", "ETH", "XAUT"];
+    function buildSettingsUI() {
+      const symbols = settingsMeta.symbols || ["BTC", "ETH", "XAUT"];
       const tabs = [{ id: "global", label: "Global" }, ...symbols.map((s) => ({ id: s, label: s }))];
-      document.getElementById("tabs").innerHTML = tabs.map((t, i) =>
+      $("settingsTabs").innerHTML = tabs.map((t, i) =>
         `<button type="button" data-tab="${t.id}" class="${i === 0 ? "active" : ""}">${t.label}</button>`
       ).join("");
-
-      let html = `<div class="panel active" data-panel="global">${renderSections("config", SCHEMA.config, state.config)}</div>`;
+      let html = `<div class="panel active" data-panel="global">${renderSections("config", SCHEMA.config, settingsState.config)}</div>`;
       for (const s of symbols) {
-        html += `<div class="panel" data-panel="${s}">${renderSections("index:" + s, SCHEMA.index, state.index[s] || {})}</div>`;
+        html += `<div class="panel" data-panel="${s}">${renderSections("index:" + s, SCHEMA.index, settingsState.index[s] || {})}</div>`;
       }
-      document.getElementById("panels").innerHTML = html;
-
-      document.querySelectorAll("#tabs button").forEach((btn) => {
-        btn.onclick = () => {
-          document.querySelectorAll("#tabs button").forEach((b) => b.classList.remove("active"));
-          document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
-          btn.classList.add("active");
-          document.querySelector(`.panel[data-panel="${btn.dataset.tab}"]`).classList.add("active");
-        };
-      });
-
-      const dry = state.config.DRY_RUN;
-      document.getElementById("statusBar").innerHTML = `
-        <div class="stat"><label>Mode</label><strong class="${dry ? "on" : "off"}">${dry ? "DRY RUN" : "LIVE"}</strong></div>
-        <div class="stat"><label>TP %</label><strong>${state.config.PROFIT_TARGET_PERCENT}</strong></div>
-        <div class="stat"><label>BE buffer</label><strong>${state.config.BREAKEVEN_BUFFER}</strong></div>
-        <div class="stat"><label>Symbols</label><strong>${symbols.join(" · ")}</strong></div>
-      `;
-      document.getElementById("footer").textContent =
-        `saved ${meta.saved_at || "never"} · file ${meta.path || "state/settings.json"}`;
+      $("settingsPanels").innerHTML = html;
+      $("settingsTabs").onclick = (ev) => {
+        const btn = ev.target.closest("button[data-tab]");
+        if (!btn) return;
+        $("settingsTabs").querySelectorAll("button").forEach((b) => b.classList.remove("active"));
+        $("settingsPanels").querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
+        btn.classList.add("active");
+        $("settingsPanels").querySelector(`.panel[data-panel="${btn.dataset.tab}"]`).classList.add("active");
+      };
     }
 
     function readValue(el, type) {
@@ -481,22 +754,20 @@
       return el.value;
     }
 
-    function collectPayload() {
+    function collectSettings() {
       const config = {};
       for (const sec of SCHEMA.config) {
         for (const f of sec.fields) {
-          const el = document.getElementById(fieldId("config", f.key));
-          const v = readValue(el, f.type);
+          const v = readValue($(fieldId("config", f.key)), f.type);
           if (v !== undefined) config[f.key] = v;
         }
       }
       const index = {};
-      for (const s of meta.symbols) {
+      for (const s of settingsMeta.symbols) {
         index[s] = {};
         for (const sec of SCHEMA.index) {
           for (const f of sec.fields) {
-            const el = document.getElementById(fieldId("index:" + s, f.key));
-            const v = readValue(el, f.type);
+            const v = readValue($(fieldId("index:" + s, f.key)), f.type);
             if (v !== undefined) index[s][f.key] = v;
           }
         }
@@ -505,8 +776,7 @@
           for (const key of DISTANCE_KEYS) {
             if (index[s][key] == null) continue;
             const val = Number(index[s][key]);
-            if (!Number.isFinite(val)) continue;
-            if (val % step !== 0) {
+            if (Number.isFinite(val) && val % step !== 0) {
               throw new Error(`${s}.${key}=${val} must be a multiple of strike_step=${step}`);
             }
           }
@@ -516,64 +786,46 @@
     }
 
     async function loadSettings() {
-      toast("loading…");
-      const res = await fetch("/api/settings");
-      if (!res.ok) throw new Error("load failed " + res.status);
-      const data = await res.json();
-      state = { config: data.config, index: data.index };
-      meta = data.meta || {};
-      buildUI();
-      toast("loaded", "ok");
+      toast("loading settings…");
+      const { res, data } = await api("/api/settings");
+      if (!res.ok) throw new Error(data.message || "load failed");
+      settingsState = { config: data.config, index: data.index };
+      settingsMeta = data.meta || {};
+      buildSettingsUI();
+      toast("settings loaded", "ok");
     }
 
-    async function saveSettings() {
-      toast("saving…");
-      document.getElementById("btnSave").disabled = true;
+    $("btnReloadSettings").onclick = () => loadSettings().catch((e) => toast(String(e.message || e), "err"));
+    $("btnSaveSettings").onclick = async () => {
+      $("btnSaveSettings").disabled = true;
       try {
-        let body;
-        try {
-          body = collectPayload();
-        } catch (ve) {
-          toast(String(ve.message || ve), "err");
-          return;
-        }
-        const res = await fetch("/api/settings", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        const data = await res.json();
+        const body = collectSettings();
+        const { res, data } = await api("/api/settings", { method: "PUT", body: JSON.stringify(body) });
         if (!res.ok || data.status === "error") throw new Error(data.message || "save failed");
-        state = { config: data.config, index: data.index };
-        meta = data.meta || meta;
-        buildUI();
+        settingsState = { config: data.config, index: data.index };
+        settingsMeta = data.meta || settingsMeta;
+        buildSettingsUI();
         toast("saved · live", "ok");
       } catch (e) {
         toast(String(e.message || e), "err");
       } finally {
-        document.getElementById("btnSave").disabled = false;
+        $("btnSaveSettings").disabled = false;
       }
-    }
-
-    async function resetDefaults() {
-      if (!confirm("Reset all settings to code defaults and clear saved file?")) return;
-      toast("resetting…");
-      const res = await fetch("/api/settings/reset", { method: "POST" });
-      const data = await res.json();
+    };
+    $("btnResetSettings").onclick = async () => {
+      if (!confirm("Reset all settings to defaults?")) return;
+      const { res, data } = await api("/api/settings/reset", { method: "POST" });
       if (!res.ok || data.status === "error") {
         toast(data.message || "reset failed", "err");
         return;
       }
-      state = { config: data.config, index: data.index };
-      meta = data.meta || {};
-      buildUI();
+      settingsState = { config: data.config, index: data.index };
+      settingsMeta = data.meta || {};
+      buildSettingsUI();
       toast("defaults restored", "ok");
-    }
+    };
 
-    document.getElementById("btnReload").onclick = () => loadSettings().catch((e) => toast(String(e), "err"));
-    document.getElementById("btnSave").onclick = () => saveSettings();
-    document.getElementById("btnReset").onclick = () => resetDefaults().catch((e) => toast(String(e), "err"));
-    loadSettings().catch((e) => toast(String(e), "err"));
+    checkAuth().catch((e) => showLogin(String(e.message || e)));
   </script>
 </body>
 </html>

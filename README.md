@@ -39,21 +39,21 @@ python3 iron_condor.py
 
 Webhook listens on `http://0.0.0.0:9000` (public: `https://delta.spotopscrew.com`).
 
-## Settings UI
+## Dashboard UI (auth required)
 
-Open **https://delta.spotopscrew.com/** (or `http://HOST:9000/`) for a live settings panel covering:
+Open **https://delta.spotopscrew.com/** — SpotFix-style login + ops dashboard:
 
-- Global ops knobs (BE buffers, TP %, day-PnL, TSL, clocks, API)
-- Per-symbol geometry (BTC / ETH / XAUT lot size, strikes, hedges, bias distances)
+- Overview: spot, bias, enter/close per symbol (no greek fields)
+- Settings: global + BTC/ETH/XAUT knobs (`hedge_distance` must be a multiple of `strike_step`)
 
-`hedge_distance` and other strike offsets must be multiples of `strike_step`. Strategy engine knobs are not exposed in the UI. Saves to `state/settings.json` and applies **live**. API:
+Set credentials in `.env`:
 
 ```bash
-curl https://delta.spotopscrew.com/api/settings
-curl -X PUT https://delta.spotopscrew.com/api/settings \
-  -H 'Content-Type: application/json' \
-  -d '{"config":{"DELTA_ADJUST":0.5,"EXPIRY_DELTA_ADJUST":0.5}}'
+UI_USERNAME=admin
+UI_PASSWORD=your-strong-password
 ```
+
+Strategy engine knobs are not exposed. Session cookie auth protects `/api/*`, `/positions`, `/bias`. `POST /iron` stays open for webhooks (optional `WEBHOOK_TOKEN`).
 
 ## Webhook
 

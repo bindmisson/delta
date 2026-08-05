@@ -25,12 +25,16 @@ import pytz
 import logging
 import requests
 
+import hashlib
+import secrets
 from copy import deepcopy
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 from threading import Thread, Semaphore, Lock
 from datetime import datetime, timedelta, date, time as dtime
 from logging.handlers import RotatingFileHandler
@@ -64,6 +68,14 @@ socket.getaddrinfo = _getaddrinfo_ipv4_first
 # ============================================================
 
 app = FastAPI()
+
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+if STATIC_DIR.exists():
+    app.mount(
+        "/static",
+        StaticFiles(directory=str(STATIC_DIR)),
+        name="static",
+    )
 
 # ============================================================
 # TZ
@@ -153,6 +165,13 @@ CONFIG = {
     "MARKET_END": "17:25",
 
     "WEBHOOK_PORT": int(os.getenv("WEBHOOK_PORT", "9000")),
+
+    # UI auth (SpotFix-style dashboard)
+    "UI_USERNAME": os.getenv("UI_USERNAME", "admin"),
+    "UI_PASSWORD": os.getenv("UI_PASSWORD", ""),
+    "UI_SESSION_HOURS": float(os.getenv("UI_SESSION_HOURS", "12")),
+    # Optional shared secret for /iron webhook (header X-Webhook-Token)
+    "WEBHOOK_TOKEN": os.getenv("WEBHOOK_TOKEN", ""),
 }
 
 # ============================================================
@@ -406,6 +425,9 @@ API_SEMAPHORE = Semaphore(1)
 DELTA_CLIENT = None
 # Cache: (underlying, expiry_ddmmyy) -> sorted strike floats
 STRIKE_CACHE = {}
+# UI sessions: token -> {user, exp}
+UI_SESSIONS = {}
+UI_SESSIONS_LOCK = Lock()
 # ============================================================
 # LOGGING
 # ============================================================
@@ -421,6 +443,115 @@ handler = RotatingFileHandler(
 
 logger.addHandler(handler)
 logger.addHandler(logging.StreamHandler())
+
+# ============================================================
+# UI AUTH
+# ============================================================
+
+SESSION_COOKIE = "ic_session"
+
+
+def ui_auth_configured():
+    return bool(str(CONFIG.get("UI_PASSWORD") or "").strip())
+
+
+def _password_ok(password: str) -> bool:
+    expected = str(CONFIG.get("UI_PASSWORD") or "")
+    if not expected:
+        return False
+    dig_a = hashlib.sha256(str(password).encode("utf-8")).digest()
+    dig_b = hashlib.sha256(expected.encode("utf-8")).digest()
+    return secrets.compare_digest(dig_a, dig_b)
+
+
+def create_ui_session(username: str) -> str:
+    token = secrets.token_urlsafe(32)
+    hours = float(CONFIG.get("UI_SESSION_HOURS") or 12)
+    exp = time.time() + max(1.0, hours) * 3600
+    with UI_SESSIONS_LOCK:
+        UI_SESSIONS[token] = {"user": username, "exp": exp}
+    return token
+
+
+def destroy_ui_session(token: str):
+    if not token:
+        return
+    with UI_SESSIONS_LOCK:
+        UI_SESSIONS.pop(token, None)
+
+
+def session_user(request: Request):
+    token = request.cookies.get(SESSION_COOKIE)
+    if not token:
+        auth = request.headers.get("Authorization") or ""
+        if auth.lower().startswith("bearer "):
+            token = auth[7:].strip()
+    if not token:
+        return None
+    with UI_SESSIONS_LOCK:
+        data = UI_SESSIONS.get(token)
+        if not data:
+            return None
+        if data["exp"] < time.time():
+            UI_SESSIONS.pop(token, None)
+            return None
+        return data["user"]
+
+
+def request_authorized(request: Request) -> bool:
+    return session_user(request) is not None
+
+
+class UIAuthMiddleware(BaseHTTPMiddleware):
+    """Protect operator APIs; leave webhook + static + login public."""
+
+    PUBLIC_EXACT = {
+        "/",
+        "/ui",
+        "/favicon.ico",
+        "/health",
+        "/api/auth/login",
+        "/api/auth/status",
+        "/api/auth/logout",
+    }
+    PUBLIC_PREFIX = ("/static/",)
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path or "/"
+
+        if path in self.PUBLIC_EXACT or path.startswith(self.PUBLIC_PREFIX):
+            return await call_next(request)
+
+        # TradingView / automation webhook
+        if path == "/iron":
+            token = CONFIG.get("WEBHOOK_TOKEN") or ""
+            if token:
+                got = (
+                    request.headers.get("X-Webhook-Token")
+                    or request.query_params.get("token")
+                    or ""
+                )
+                if not secrets.compare_digest(str(got), str(token)):
+                    return JSONResponse(
+                        {"status": "error", "message": "UNAUTHORIZED"},
+                        status_code=401,
+                    )
+            return await call_next(request)
+
+        # Everything else under /api, /positions, /bias needs session
+        needs_auth = (
+            path.startswith("/api/")
+            or path in ("/positions", "/bias")
+        )
+        if needs_auth and not request_authorized(request):
+            return JSONResponse(
+                {"status": "error", "message": "UNAUTHORIZED"},
+                status_code=401,
+            )
+        return await call_next(request)
+
+
+app.add_middleware(UIAuthMiddleware)
 
 # ============================================================
 # SETTINGS (persistent, UI-managed)
@@ -4505,13 +4636,13 @@ def health():
 
 
 # ============================================================
-# SETTINGS UI / API
+# SETTINGS UI / API + AUTH
 # ============================================================
 
 
 @app.get("/")
 def ui_root():
-    path = Path(__file__).resolve().parent / "static" / "index.html"
+    path = STATIC_DIR / "index.html"
     if not path.exists():
         return {"status": "error", "message": "UI missing"}
     return FileResponse(path)
@@ -4520,6 +4651,176 @@ def ui_root():
 @app.get("/ui")
 def ui_page():
     return ui_root()
+
+
+@app.get("/favicon.ico")
+def favicon():
+    logo = STATIC_DIR / "logo.png"
+    if logo.exists():
+        return FileResponse(logo)
+    return JSONResponse({"status": "missing"}, status_code=404)
+
+
+@app.get("/api/auth/status")
+def auth_status(request: Request):
+    user = session_user(request)
+    return {
+        "status": "ok",
+        "authenticated": bool(user),
+        "user": user,
+        "auth_configured": ui_auth_configured(),
+    }
+
+
+@app.post("/api/auth/login")
+async def auth_login(request: Request):
+    if not ui_auth_configured():
+        return JSONResponse(
+            {
+                "status": "error",
+                "message": "UI_PASSWORD not set on server",
+            },
+            status_code=503,
+        )
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    username = str(payload.get("username") or "").strip()
+    password = str(payload.get("password") or "")
+    expected_user = str(CONFIG.get("UI_USERNAME") or "admin")
+    user_ok = secrets.compare_digest(
+        hashlib.sha256(username.encode("utf-8")).digest(),
+        hashlib.sha256(expected_user.encode("utf-8")).digest(),
+    )
+    if not (user_ok and _password_ok(password)):
+        return JSONResponse(
+            {"status": "error", "message": "Invalid username or password"},
+            status_code=401,
+        )
+    token = create_ui_session(username)
+    resp = JSONResponse(
+        {
+            "status": "ok",
+            "user": username,
+            "message": "LOGGED IN",
+        }
+    )
+    resp.set_cookie(
+        key=SESSION_COOKIE,
+        value=token,
+        httponly=True,
+        samesite="lax",
+        secure=request.url.scheme == "https",
+        max_age=int(
+            max(1.0, float(CONFIG.get("UI_SESSION_HOURS") or 12)) * 3600
+        ),
+        path="/",
+    )
+    return resp
+
+
+@app.post("/api/auth/logout")
+def auth_logout(request: Request):
+    destroy_ui_session(request.cookies.get(SESSION_COOKIE))
+    resp = JSONResponse({"status": "ok", "message": "LOGGED OUT"})
+    resp.delete_cookie(SESSION_COOKIE, path="/")
+    return resp
+
+
+@app.get("/api/dashboard")
+def api_dashboard():
+    """Operator overview — no greek / strategy fields."""
+    symbols = {}
+    for symbol in INDEX_CONFIG:
+        pos = POSITIONS.get(symbol) or {}
+        active = bool(pos.get("active"))
+        spot = None
+        try:
+            spot = get_live_spot(symbol)
+        except Exception:
+            spot = None
+        legs = {}
+        if active:
+            for name in ("ce_short", "pe_short", "ce_buy", "pe_buy"):
+                leg = pos.get(name) or {}
+                legs[name] = {
+                    "symbol": leg.get("symbol"),
+                    "strike": leg.get("strike"),
+                }
+        symbols[symbol] = {
+            "active": active,
+            "bias": get_current_bias(symbol),
+            "spot": spot,
+            "expiry": pos.get("expiry") if active else get_active_expiry(symbol),
+            "lot_size": pos.get("lot_size") if active else INDEX_CONFIG[symbol].get("lot_size"),
+            "entry_credit": pos.get("entry_credit") if active else None,
+            "upper_be": pos.get("upper_be") if active else None,
+            "lower_be": pos.get("lower_be") if active else None,
+            "adjustments": pos.get("adjustments") if active else 0,
+            "legs": legs,
+        }
+    return {
+        "status": "ok",
+        "dry_run": CONFIG.get("DRY_RUN"),
+        "symbols": symbols,
+        "time_ist": now_ist().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+
+@app.post("/api/enter")
+def api_enter(payload: dict):
+    symbol = str(payload.get("symbol") or "").upper()
+    if symbol not in INDEX_CONFIG:
+        return {"status": "error", "message": "INVALID SYMBOL"}
+    bias = set_current_bias(
+        symbol, payload.get("bias", "NONE"), source="ui"
+    )
+    qty_raw = payload.get("contracts", payload.get("qty"))
+    quantity = None
+    if qty_raw is not None:
+        try:
+            quantity = int(qty_raw)
+        except (TypeError, ValueError):
+            return {"status": "error", "message": "INVALID CONTRACTS"}
+        if quantity <= 0:
+            return {"status": "error", "message": "CONTRACTS MUST BE > 0"}
+    spot = get_live_spot(symbol)
+    if not spot:
+        return {"status": "error", "message": "LIVE SPOT UNAVAILABLE"}
+    if POSITIONS.get(symbol) and POSITIONS[symbol].get("active"):
+        close_position(symbol)
+    create_condor(symbol, bias, float(spot), quantity=quantity)
+    return {
+        "status": "ok",
+        "entered": True,
+        "bias": bias,
+        "spot": spot,
+        "contracts": POSITIONS[symbol].get("lot_size"),
+        "position": public_sanitize(POSITIONS[symbol]),
+    }
+
+
+@app.post("/api/close")
+def api_close(payload: dict):
+    symbol = str(payload.get("symbol") or "").upper()
+    if symbol not in INDEX_CONFIG:
+        return {"status": "error", "message": "INVALID SYMBOL"}
+    if not (POSITIONS.get(symbol) or {}).get("active"):
+        return {"status": "ok", "closed": False, "message": "NO ACTIVE POSITION"}
+    close_position(symbol)
+    return {"status": "ok", "closed": True, "symbol": symbol}
+
+
+@app.post("/api/bias")
+def api_bias(payload: dict):
+    symbol = str(payload.get("symbol") or "").upper()
+    if symbol not in INDEX_CONFIG:
+        return {"status": "error", "message": "INVALID SYMBOL"}
+    bias = set_current_bias(
+        symbol, payload.get("bias", "NONE"), source="ui"
+    )
+    return {"status": "ok", "symbol": symbol, "bias": bias}
 
 
 @app.get("/api/settings")
