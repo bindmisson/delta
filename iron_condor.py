@@ -25,9 +25,13 @@ import pytz
 import logging
 import requests
 
+from copy import deepcopy
+from pathlib import Path
+
 from dotenv import load_dotenv
 from fastapi import FastAPI
-from threading import Thread, Semaphore
+from fastapi.responses import FileResponse
+from threading import Thread, Semaphore, Lock
 from datetime import datetime, timedelta, date, time as dtime
 from logging.handlers import RotatingFileHandler
 
@@ -95,7 +99,7 @@ CONFIG = {
     "EXPIRY_INTERVAL": 15,
 
     "DELTA_PREPARE": 0.20,
-    "DELTA_ADJUST": 0.33,
+    "DELTA_ADJUST": 0.5,
     "DELTA_AGGRESSIVE": 0.50,
     "DELTA_PANIC": 0.75,
 
@@ -115,9 +119,11 @@ CONFIG = {
     "BREAKEVEN_BUFFER": 150,
     "EXPIRY_BE_BUFFER": 250,
 
-    # PROFIT BOOKING
-    "PROFIT_TARGET_PERCENT": 85,
-    "EXPIRY_PROFIT_TARGET_PERCENT": 80,
+    # PROFIT BOOKING — % of max credit captured (not fixed $)
+    "PROFIT_TARGET_PERCENT": float(os.getenv("PROFIT_TARGET_PERCENT", "80")),
+    "EXPIRY_PROFIT_TARGET_PERCENT": float(
+        os.getenv("EXPIRY_PROFIT_TARGET_PERCENT", "80")
+    ),
     # On expiry day after this IST time → trade next daily expiry
     "EXPIRY_NEXT_WEEK_TIME": "12:55",
     # Hard settlement clock for Delta daily options
@@ -135,10 +141,12 @@ CONFIG = {
 
     # Day-based PnL target (USD credit * contracts)
     # Day N → target = DAY_PNL_BASE_USD * N
-    "DAY_PNL_ENABLED": True,
+    "DAY_PNL_ENABLED": os.getenv("DAY_PNL_ENABLED", "false").lower()
+        in ("1", "true", "yes"),
     "DAY_PNL_BASE_RUPEE": float(os.getenv("DAY_PNL_BASE_USD", "15")),
     "DAY_PNL_INCLUDE_ENTRY_DAY": True,
-    "DAY_PNL_REENTER": True,
+    "DAY_PNL_REENTER": os.getenv("DAY_PNL_REENTER", "false").lower()
+        in ("1", "true", "yes"),
 
     # Crypto options nearly 24x7; cut off just before settlement
     "MARKET_START": "00:05",
@@ -176,8 +184,12 @@ INDEX_CONFIG = {
         # Risk / exits
         "be_buffer": 150,
         "expiry_be_buffer": 250,
-        "profit_target_percent": 85,
-        "expiry_profit_target_percent": 80,
+        "profit_target_percent": float(
+            os.getenv("BTC_PROFIT_TARGET_PERCENT", "80")
+        ),
+        "expiry_profit_target_percent": float(
+            os.getenv("BTC_EXPIRY_PROFIT_TARGET_PERCENT", "80")
+        ),
         "day_pnl_base": float(os.getenv("BTC_DAY_PNL_BASE", "15")),
         "tsl_start": 70,
         "tsl_lock": 50,
@@ -204,8 +216,12 @@ INDEX_CONFIG = {
         "hedge_distance": 100,
         "be_buffer": 8,
         "expiry_be_buffer": 12,
-        "profit_target_percent": 85,
-        "expiry_profit_target_percent": 80,
+        "profit_target_percent": float(
+            os.getenv("ETH_PROFIT_TARGET_PERCENT", "80")
+        ),
+        "expiry_profit_target_percent": float(
+            os.getenv("ETH_EXPIRY_PROFIT_TARGET_PERCENT", "80")
+        ),
         "day_pnl_base": float(os.getenv("ETH_DAY_PNL_BASE", "8")),
         "tsl_start": 70,
         "tsl_lock": 50,
@@ -233,8 +249,12 @@ INDEX_CONFIG = {
         "hedge_distance": 120,
         "be_buffer": 15,
         "expiry_be_buffer": 25,
-        "profit_target_percent": 85,
-        "expiry_profit_target_percent": 80,
+        "profit_target_percent": float(
+            os.getenv("XAUT_PROFIT_TARGET_PERCENT", "80")
+        ),
+        "expiry_profit_target_percent": float(
+            os.getenv("XAUT_EXPIRY_PROFIT_TARGET_PERCENT", "80")
+        ),
         "day_pnl_base": float(os.getenv("XAUT_DAY_PNL_BASE", "5")),
         "tsl_start": 70,
         "tsl_lock": 50,
@@ -242,6 +262,88 @@ INDEX_CONFIG = {
         "startup_delay": 10,
     },
 }
+
+# Code defaults — used by settings UI reset (env already baked in at import)
+DEFAULT_CONFIG = deepcopy(CONFIG)
+DEFAULT_INDEX_CONFIG = deepcopy(INDEX_CONFIG)
+
+SETTINGS_PATH = Path(
+    os.getenv("SETTINGS_PATH", "state/settings.json")
+)
+SETTINGS_LOCK = Lock()
+
+# Keys editable via UI / API (secrets are write-only on GET)
+CONFIG_SETTING_KEYS = [
+    "DRY_RUN",
+    "DELTA_BASE_URL",
+    "DELTA_API_KEY",
+    "DELTA_API_SECRET",
+    "API_DELAY",
+    "API_RETRY",
+    "API_RETRY_DELAY",
+    "SAFE_INTERVAL",
+    "DANGER_INTERVAL",
+    "EXPIRY_INTERVAL",
+    "DELTA_PREPARE",
+    "DELTA_ADJUST",
+    "DELTA_AGGRESSIVE",
+    "DELTA_PANIC",
+    "EXPIRY_DELTA_PREPARE",
+    "EXPIRY_DELTA_ADJUST",
+    "EXPIRY_DELTA_AGGRESSIVE",
+    "EXPIRY_DELTA_PANIC",
+    "PANIC_GAMMA",
+    "EXPIRY_PANIC_GAMMA",
+    "BREAKEVEN_BUFFER",
+    "EXPIRY_BE_BUFFER",
+    "PROFIT_TARGET_PERCENT",
+    "EXPIRY_PROFIT_TARGET_PERCENT",
+    "EXPIRY_NEXT_WEEK_TIME",
+    "EXPIRY_SETTLEMENT_TIME",
+    "MAX_ADJUSTMENTS",
+    "EXPIRY_MAX_ADJUSTMENTS",
+    "ADJUSTMENT_COOLDOWN",
+    "TSL_START",
+    "TSL_LOCK",
+    "TSL_STEP",
+    "DAY_PNL_ENABLED",
+    "DAY_PNL_BASE_RUPEE",
+    "DAY_PNL_INCLUDE_ENTRY_DAY",
+    "DAY_PNL_REENTER",
+    "MARKET_START",
+    "MARKET_END",
+    "WEBHOOK_PORT",
+]
+
+CONFIG_SECRET_KEYS = {"DELTA_API_KEY", "DELTA_API_SECRET"}
+
+INDEX_SETTING_KEYS = [
+    "exchange",
+    "underlying_symbol",
+    "strike_step",
+    "lot_size",
+    "expiry_day",
+    "settlement_time",
+    "market_start",
+    "market_end",
+    "expiry_switch_time",
+    "ce_distance",
+    "pe_distance",
+    "CE_BIAS_CE_DISTANCE",
+    "CE_BIAS_PE_DISTANCE",
+    "PE_BIAS_CE_DISTANCE",
+    "PE_BIAS_PE_DISTANCE",
+    "hedge_distance",
+    "be_buffer",
+    "expiry_be_buffer",
+    "profit_target_percent",
+    "expiry_profit_target_percent",
+    "day_pnl_base",
+    "tsl_start",
+    "tsl_lock",
+    "tsl_step",
+    "startup_delay",
+]
 
 # ============================================================
 # HOLIDAYS
@@ -276,6 +378,195 @@ handler = RotatingFileHandler(
 
 logger.addHandler(handler)
 logger.addHandler(logging.StreamHandler())
+
+# ============================================================
+# SETTINGS (persistent, UI-managed)
+# ============================================================
+
+
+def _coerce_setting_value(key, value, reference):
+    """Cast incoming UI/API values to the type of the current/default value."""
+    if value is None:
+        return None
+    if isinstance(reference, bool):
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        return str(value).strip().lower() in ("1", "true", "yes", "on")
+    if isinstance(reference, int) and not isinstance(reference, bool):
+        return int(float(value))
+    if isinstance(reference, float):
+        return float(value)
+    return str(value)
+
+
+def snapshot_settings(mask_secrets=True):
+    config = {k: CONFIG.get(k) for k in CONFIG_SETTING_KEYS if k in CONFIG}
+    if mask_secrets:
+        for k in CONFIG_SECRET_KEYS:
+            if config.get(k):
+                config[k] = "••••••••"
+            else:
+                config[k] = ""
+    index = {}
+    for symbol, cfg in INDEX_CONFIG.items():
+        index[symbol] = {
+            k: cfg.get(k) for k in INDEX_SETTING_KEYS if k in cfg
+        }
+    meta = {
+        "path": str(SETTINGS_PATH),
+        "symbols": list(INDEX_CONFIG.keys()),
+        "saved_at": None,
+    }
+    if SETTINGS_PATH.exists():
+        try:
+            meta["saved_at"] = datetime.fromtimestamp(
+                SETTINGS_PATH.stat().st_mtime, tz=IST
+            ).strftime("%Y-%m-%d %H:%M:%S %Z")
+        except Exception:
+            pass
+    return {"config": config, "index": index, "meta": meta}
+
+
+def apply_settings_payload(payload, persist=True):
+    """
+    Merge payload into live CONFIG / INDEX_CONFIG.
+    Returns (ok, message, snapshot).
+    """
+    global DELTA_CLIENT
+
+    if not isinstance(payload, dict):
+        return False, "INVALID PAYLOAD", snapshot_settings()
+
+    config_in = payload.get("config") or {}
+    index_in = payload.get("index") or {}
+    if config_in and not isinstance(config_in, dict):
+        return False, "INVALID CONFIG", snapshot_settings()
+    if index_in and not isinstance(index_in, dict):
+        return False, "INVALID INDEX", snapshot_settings()
+
+    with SETTINGS_LOCK:
+        keys_changed = False
+        for key, raw in config_in.items():
+            if key not in CONFIG_SETTING_KEYS:
+                continue
+            if key in CONFIG_SECRET_KEYS:
+                if raw in (None, "", "••••••••"):
+                    continue
+            if key not in CONFIG:
+                continue
+            try:
+                CONFIG[key] = _coerce_setting_value(
+                    key, raw, DEFAULT_CONFIG.get(key, CONFIG[key])
+                )
+            except (TypeError, ValueError) as e:
+                return False, f"BAD VALUE {key}: {e}", snapshot_settings()
+            if key in CONFIG_SECRET_KEYS:
+                keys_changed = True
+
+        for symbol, patch in index_in.items():
+            if symbol not in INDEX_CONFIG:
+                continue
+            if not isinstance(patch, dict):
+                continue
+            for key, raw in patch.items():
+                if key not in INDEX_SETTING_KEYS:
+                    continue
+                if key not in INDEX_CONFIG[symbol]:
+                    continue
+                try:
+                    INDEX_CONFIG[symbol][key] = _coerce_setting_value(
+                        key,
+                        raw,
+                        DEFAULT_INDEX_CONFIG[symbol].get(
+                            key, INDEX_CONFIG[symbol][key]
+                        ),
+                    )
+                except (TypeError, ValueError) as e:
+                    return (
+                        False,
+                        f"BAD VALUE {symbol}.{key}: {e}",
+                        snapshot_settings(),
+                    )
+
+        if keys_changed:
+            DELTA_CLIENT = None
+
+        if persist:
+            SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+            to_store = snapshot_settings(mask_secrets=False)
+            # Don't persist masked placeholders
+            for k in CONFIG_SECRET_KEYS:
+                val = to_store["config"].get(k)
+                if val in ("", "••••••••"):
+                    # keep previously saved secret if present
+                    try:
+                        prev = json.loads(SETTINGS_PATH.read_text())
+                        old = (prev.get("config") or {}).get(k)
+                        if old and old not in ("", "••••••••"):
+                            to_store["config"][k] = old
+                        else:
+                            to_store["config"].pop(k, None)
+                    except Exception:
+                        to_store["config"].pop(k, None)
+            to_store.pop("meta", None)
+            SETTINGS_PATH.write_text(
+                json.dumps(to_store, indent=2) + "\n"
+            )
+
+    try:
+        log_event(
+            "SETTINGS",
+            "UPDATED",
+            {
+                "persist": persist,
+                "delta_adjust": CONFIG.get("DELTA_ADJUST"),
+                "expiry_delta_adjust": CONFIG.get(
+                    "EXPIRY_DELTA_ADJUST"
+                ),
+            },
+        )
+    except Exception:
+        pass
+
+    return True, "OK", snapshot_settings()
+
+
+def load_settings():
+    """Load state/settings.json over code defaults at startup."""
+    if not SETTINGS_PATH.exists():
+        return
+    try:
+        data = json.loads(SETTINGS_PATH.read_text())
+    except Exception as e:
+        logger.info("SETTINGS LOAD FAILED: %s", e)
+        return
+    ok, msg, _ = apply_settings_payload(data, persist=False)
+    if ok:
+        logger.info("SETTINGS LOADED from %s", SETTINGS_PATH)
+    else:
+        logger.info("SETTINGS LOAD REJECTED: %s", msg)
+
+
+def reset_settings_to_defaults():
+    global DELTA_CLIENT
+    with SETTINGS_LOCK:
+        CONFIG.clear()
+        CONFIG.update(deepcopy(DEFAULT_CONFIG))
+        for symbol in list(INDEX_CONFIG.keys()):
+            INDEX_CONFIG[symbol] = deepcopy(
+                DEFAULT_INDEX_CONFIG[symbol]
+            )
+        DELTA_CLIENT = None
+        if SETTINGS_PATH.exists():
+            SETTINGS_PATH.unlink()
+    try:
+        log_event("SETTINGS", "RESET TO DEFAULTS")
+    except Exception:
+        pass
+    return snapshot_settings()
+
 
 # ============================================================
 # HELPERS
@@ -4088,6 +4379,67 @@ def health():
 
 
 # ============================================================
+# SETTINGS UI / API
+# ============================================================
+
+
+@app.get("/")
+def ui_root():
+    path = Path(__file__).resolve().parent / "static" / "index.html"
+    if not path.exists():
+        return {"status": "error", "message": "UI missing"}
+    return FileResponse(path)
+
+
+@app.get("/ui")
+def ui_page():
+    return ui_root()
+
+
+@app.get("/api/settings")
+def get_settings():
+    snap = snapshot_settings(mask_secrets=True)
+    return {
+        "status": "ok",
+        "config": snap["config"],
+        "index": snap["index"],
+        "meta": snap["meta"],
+    }
+
+
+@app.put("/api/settings")
+def put_settings(payload: dict):
+    ok, msg, snap = apply_settings_payload(payload, persist=True)
+    if not ok:
+        return {
+            "status": "error",
+            "message": msg,
+            "config": snap["config"],
+            "index": snap["index"],
+            "meta": snap["meta"],
+        }
+    return {
+        "status": "ok",
+        "message": msg,
+        "config": snap["config"],
+        "index": snap["index"],
+        "meta": snap["meta"],
+    }
+
+
+@app.post("/api/settings/reset")
+def reset_settings():
+    snap = reset_settings_to_defaults()
+    return {
+        "status": "ok",
+        "message": "RESET",
+        "config": snap["config"],
+        "index": snap["index"],
+        "meta": snap["meta"],
+    }
+
+
+# ============================================================
 # STARTUP
 # ============================================================
 
@@ -4096,6 +4448,7 @@ if __name__ == "__main__":
 
     cleanup_expired_positions()
 
+    load_settings()
     load_positions()
     load_pending_rolls()
     load_biases()

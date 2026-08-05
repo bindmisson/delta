@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DELTA IC — Settings</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0e1210;
+      --panel: #161c18;
+      --panel2: #1c241e;
+      --line: #2a342c;
+      --text: #e6ede7;
+      --muted: #8a9a8e;
+      --accent: #3dba7a;
+      --accent-dim: #2a7a52;
+      --warn: #d4a017;
+      --danger: #e05a4f;
+      --input: #0b0f0c;
+      --radius: 8px;
+      --font: "IBM Plex Sans", system-ui, sans-serif;
+      --mono: "IBM Plex Mono", ui-monospace, monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font);
+      color: var(--text);
+      background:
+        radial-gradient(900px 420px at 10% -10%, #1a2e22 0%, transparent 55%),
+        radial-gradient(700px 380px at 100% 0%, #1a2218 0%, transparent 50%),
+        var(--bg);
+    }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(14, 18, 16, 0.85);
+      backdrop-filter: blur(8px);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .brand {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .brand h1 {
+      margin: 0;
+      font-size: 1.15rem;
+      letter-spacing: 0.04em;
+      font-weight: 700;
+    }
+    .brand span {
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-family: var(--mono);
+    }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    button, .btn {
+      font-family: var(--font);
+      font-weight: 600;
+      font-size: 0.85rem;
+      border: 1px solid var(--line);
+      background: var(--panel2);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 8px 14px;
+      cursor: pointer;
+    }
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent-dim);
+      color: #04120a;
+    }
+    button.ghost:hover, button.primary:hover { filter: brightness(1.08); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    #toast {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--muted);
+      min-width: 140px;
+      text-align: right;
+    }
+    #toast.ok { color: var(--accent); }
+    #toast.err { color: var(--danger); }
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 18px 18px 48px;
+    }
+    .status-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .stat {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+    }
+    .stat label {
+      display: block;
+      color: var(--muted);
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 4px;
+    }
+    .stat strong {
+      font-family: var(--mono);
+      font-size: 0.95rem;
+      font-weight: 500;
+    }
+    .stat strong.on { color: var(--warn); }
+    .stat strong.off { color: var(--accent); }
+    .tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+    .tabs button {
+      background: transparent;
+      border-color: transparent;
+      color: var(--muted);
+    }
+    .tabs button.active {
+      background: var(--panel);
+      border-color: var(--line);
+      color: var(--text);
+    }
+    .panel {
+      display: none;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 8px 4px 16px;
+    }
+    .panel.active { display: block; }
+    .section-title {
+      margin: 16px 14px 8px;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 10px;
+      padding: 0 12px;
+    }
+    .field {
+      background: var(--panel2);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px 12px;
+    }
+    .field label {
+      display: block;
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+      font-family: var(--mono);
+    }
+    .field .hint {
+      margin-top: 5px;
+      font-size: 0.68rem;
+      color: #6a7a6e;
+      line-height: 1.3;
+    }
+    .field input[type="text"],
+    .field input[type="number"],
+    .field input[type="password"],
+    .field select {
+      width: 100%;
+      background: var(--input);
+      border: 1px solid var(--line);
+      color: var(--text);
+      border-radius: 4px;
+      padding: 7px 9px;
+      font-family: var(--mono);
+      font-size: 0.85rem;
+    }
+    .field input:focus, .field select:focus {
+      outline: 1px solid var(--accent-dim);
+      border-color: var(--accent-dim);
+    }
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .switch {
+      position: relative;
+      width: 42px;
+      height: 24px;
+      flex-shrink: 0;
+    }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .switch span {
+      position: absolute;
+      inset: 0;
+      background: #2a322c;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: 0.15s;
+    }
+    .switch span::before {
+      content: "";
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      left: 3px;
+      top: 3px;
+      background: #c5d0c8;
+      border-radius: 50%;
+      transition: 0.15s;
+    }
+    .switch input:checked + span { background: var(--accent-dim); }
+    .switch input:checked + span::before {
+      transform: translateX(18px);
+      background: #e8fff0;
+    }
+    .note {
+      margin: 14px 14px 0;
+      padding: 10px 12px;
+      border-left: 3px solid var(--warn);
+      background: rgba(212, 160, 23, 0.08);
+      color: #d8c48a;
+      font-size: 0.78rem;
+      line-height: 1.4;
+    }
+    footer {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-family: var(--mono);
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <h1>DELTA IRON CONDOR</h1>
+      <span>live settings · no restart for most knobs</span>
+    </div>
+    <div class="actions">
+      <span id="toast">—</span>
+      <button class="ghost" type="button" id="btnReload">Reload</button>
+      <button class="ghost" type="button" id="btnReset">Reset defaults</button>
+      <button class="primary" type="button" id="btnSave">Save</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="status-bar" id="statusBar"></div>
+    <div class="tabs" id="tabs"></div>
+    <div id="panels"></div>
+    <p class="note">
+      API keys are write-only here (masked on load). Leave blank to keep the current secret.
+      Changing <code>WEBHOOK_PORT</code> needs a process restart. Geometry changes apply to the next roll / entry.
+    </p>
+    <footer id="footer"></footer>
+  </main>
+
+  <script>
+    const SCHEMA = {
+      config: [
+        {
+          title: "Mode & API",
+          fields: [
+            { key: "DRY_RUN", type: "bool", label: "DRY_RUN", hint: "Log orders only — no live sends" },
+            { key: "DELTA_BASE_URL", type: "text", label: "DELTA_BASE_URL" },
+            { key: "DELTA_API_KEY", type: "secret", label: "DELTA_API_KEY" },
+            { key: "DELTA_API_SECRET", type: "secret", label: "DELTA_API_SECRET" },
+            { key: "API_DELAY", type: "number", step: 0.1, label: "API_DELAY" },
+            { key: "API_RETRY", type: "number", step: 1, label: "API_RETRY" },
+            { key: "API_RETRY_DELAY", type: "number", step: 0.1, label: "API_RETRY_DELAY" },
+            { key: "WEBHOOK_PORT", type: "number", step: 1, label: "WEBHOOK_PORT", hint: "Needs restart" },
+          ],
+        },
+        {
+          title: "Monitor intervals (sec)",
+          fields: [
+            { key: "SAFE_INTERVAL", type: "number", step: 1 },
+            { key: "DANGER_INTERVAL", type: "number", step: 1 },
+            { key: "EXPIRY_INTERVAL", type: "number", step: 1 },
+          ],
+        },
+        {
+          title: "Delta zones (non-expiry)",
+          fields: [
+            { key: "DELTA_PREPARE", type: "number", step: 0.01 },
+            { key: "DELTA_ADJUST", type: "number", step: 0.01, hint: "Roll gate + monitor adjust" },
+            { key: "DELTA_AGGRESSIVE", type: "number", step: 0.01 },
+            { key: "DELTA_PANIC", type: "number", step: 0.01 },
+          ],
+        },
+        {
+          title: "Delta zones (expiry day)",
+          fields: [
+            { key: "EXPIRY_DELTA_PREPARE", type: "number", step: 0.01 },
+            { key: "EXPIRY_DELTA_ADJUST", type: "number", step: 0.01 },
+            { key: "EXPIRY_DELTA_AGGRESSIVE", type: "number", step: 0.01 },
+            { key: "EXPIRY_DELTA_PANIC", type: "number", step: 0.01 },
+          ],
+        },
+        {
+          title: "Gamma / breakeven / profit",
+          fields: [
+            { key: "PANIC_GAMMA", type: "number", step: 0.0001 },
+            { key: "EXPIRY_PANIC_GAMMA", type: "number", step: 0.0001 },
+            { key: "BREAKEVEN_BUFFER", type: "number", step: 1 },
+            { key: "EXPIRY_BE_BUFFER", type: "number", step: 1 },
+            { key: "PROFIT_TARGET_PERCENT", type: "number", step: 1 },
+            { key: "EXPIRY_PROFIT_TARGET_PERCENT", type: "number", step: 1 },
+          ],
+        },
+        {
+          title: "Clocks & adjustment",
+          fields: [
+            { key: "EXPIRY_NEXT_WEEK_TIME", type: "text", hint: "HH:MM IST" },
+            { key: "EXPIRY_SETTLEMENT_TIME", type: "text", hint: "HH:MM IST" },
+            { key: "MARKET_START", type: "text" },
+            { key: "MARKET_END", type: "text" },
+            { key: "MAX_ADJUSTMENTS", type: "number", step: 1 },
+            { key: "EXPIRY_MAX_ADJUSTMENTS", type: "number", step: 1 },
+            { key: "ADJUSTMENT_COOLDOWN", type: "number", step: 1, hint: "Seconds" },
+          ],
+        },
+        {
+          title: "TSL & day PnL",
+          fields: [
+            { key: "TSL_START", type: "number", step: 1 },
+            { key: "TSL_LOCK", type: "number", step: 1 },
+            { key: "TSL_STEP", type: "number", step: 1 },
+            { key: "DAY_PNL_ENABLED", type: "bool" },
+            { key: "DAY_PNL_BASE_RUPEE", type: "number", step: 0.5, hint: "USD base × day_n" },
+            { key: "DAY_PNL_INCLUDE_ENTRY_DAY", type: "bool" },
+            { key: "DAY_PNL_REENTER", type: "bool" },
+          ],
+        },
+      ],
+      index: [
+        {
+          title: "Size & geometry",
+          fields: [
+            { key: "lot_size", type: "number", step: 1 },
+            { key: "strike_step", type: "number", step: 1 },
+            { key: "ce_distance", type: "number", step: 1 },
+            { key: "pe_distance", type: "number", step: 1 },
+            { key: "hedge_distance", type: "number", step: 1 },
+            { key: "CE_BIAS_CE_DISTANCE", type: "number", step: 1 },
+            { key: "CE_BIAS_PE_DISTANCE", type: "number", step: 1 },
+            { key: "PE_BIAS_CE_DISTANCE", type: "number", step: 1 },
+            { key: "PE_BIAS_PE_DISTANCE", type: "number", step: 1 },
+          ],
+        },
+        {
+          title: "Clocks (IST)",
+          fields: [
+            { key: "underlying_symbol", type: "text" },
+            { key: "settlement_time", type: "text" },
+            { key: "market_start", type: "text" },
+            { key: "market_end", type: "text" },
+            { key: "expiry_switch_time", type: "text" },
+            { key: "startup_delay", type: "number", step: 1 },
+          ],
+        },
+        {
+          title: "Risk / exits",
+          fields: [
+            { key: "be_buffer", type: "number", step: 1 },
+            { key: "expiry_be_buffer", type: "number", step: 1 },
+            { key: "profit_target_percent", type: "number", step: 1 },
+            { key: "expiry_profit_target_percent", type: "number", step: 1 },
+            { key: "day_pnl_base", type: "number", step: 0.5 },
+            { key: "tsl_start", type: "number", step: 1 },
+            { key: "tsl_lock", type: "number", step: 1 },
+            { key: "tsl_step", type: "number", step: 1 },
+          ],
+        },
+      ],
+    };
+
+    let state = null;
+    let meta = null;
+
+    const toast = (msg, kind) => {
+      const el = document.getElementById("toast");
+      el.textContent = msg;
+      el.className = kind || "";
+    };
+
+    const fieldId = (scope, key) => `${scope}__${key}`;
+
+    function renderField(scope, f, value) {
+      const id = fieldId(scope, f.key);
+      const label = f.label || f.key;
+      if (f.type === "bool") {
+        const checked = !!value ? "checked" : "";
+        return `<div class="field">
+          <div class="toggle-row">
+            <label for="${id}">${label}</label>
+            <label class="switch"><input type="checkbox" id="${id}" ${checked} /><span></span></label>
+          </div>
+          ${f.hint ? `<div class="hint">${f.hint}</div>` : ""}
+        </div>`;
+      }
+      if (f.type === "secret") {
+        return `<div class="field">
+          <label for="${id}">${label}</label>
+          <input type="password" id="${id}" value="" placeholder="${value || "••••••••"}" autocomplete="off" />
+          <div class="hint">${f.hint || "Leave blank to keep current"}</div>
+        </div>`;
+      }
+      const step = f.step != null ? `step="${f.step}"` : "";
+      const inputType = f.type === "number" ? "number" : "text";
+      const v = value == null ? "" : value;
+      return `<div class="field">
+        <label for="${id}">${label}</label>
+        <input type="${inputType}" id="${id}" value="${String(v).replace(/"/g, "&quot;")}" ${step} />
+        ${f.hint ? `<div class="hint">${f.hint}</div>` : ""}
+      </div>`;
+    }
+
+    function renderSections(scope, sections, data) {
+      return sections.map((sec) => `
+        <div class="section-title">${sec.title}</div>
+        <div class="grid">
+          ${sec.fields.map((f) => renderField(scope, f, data[f.key])).join("")}
+        </div>
+      `).join("");
+    }
+
+    function buildUI() {
+      const symbols = meta.symbols || ["BTC", "ETH", "XAUT"];
+      const tabs = [{ id: "global", label: "Global" }, ...symbols.map((s) => ({ id: s, label: s }))];
+      document.getElementById("tabs").innerHTML = tabs.map((t, i) =>
+        `<button type="button" data-tab="${t.id}" class="${i === 0 ? "active" : ""}">${t.label}</button>`
+      ).join("");
+
+      let html = `<div class="panel active" data-panel="global">${renderSections("config", SCHEMA.config, state.config)}</div>`;
+      for (const s of symbols) {
+        html += `<div class="panel" data-panel="${s}">${renderSections("index:" + s, SCHEMA.index, state.index[s] || {})}</div>`;
+      }
+      document.getElementById("panels").innerHTML = html;
+
+      document.querySelectorAll("#tabs button").forEach((btn) => {
+        btn.onclick = () => {
+          document.querySelectorAll("#tabs button").forEach((b) => b.classList.remove("active"));
+          document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
+          btn.classList.add("active");
+          document.querySelector(`.panel[data-panel="${btn.dataset.tab}"]`).classList.add("active");
+        };
+      });
+
+      const dry = state.config.DRY_RUN;
+      document.getElementById("statusBar").innerHTML = `
+        <div class="stat"><label>Mode</label><strong class="${dry ? "on" : "off"}">${dry ? "DRY RUN" : "LIVE"}</strong></div>
+        <div class="stat"><label>Δ adjust</label><strong>${state.config.DELTA_ADJUST}</strong></div>
+        <div class="stat"><label>Expiry Δ adjust</label><strong>${state.config.EXPIRY_DELTA_ADJUST}</strong></div>
+        <div class="stat"><label>TP %</label><strong>${state.config.PROFIT_TARGET_PERCENT}</strong></div>
+        <div class="stat"><label>Symbols</label><strong>${symbols.join(" · ")}</strong></div>
+      `;
+      document.getElementById("footer").textContent =
+        `saved ${meta.saved_at || "never"} · file ${meta.path || "state/settings.json"}`;
+    }
+
+    function readValue(el, type) {
+      if (!el) return undefined;
+      if (type === "bool") return !!el.checked;
+      if (type === "number") {
+        const n = Number(el.value);
+        return Number.isFinite(n) ? n : el.value;
+      }
+      if (type === "secret") {
+        const v = el.value.trim();
+        return v === "" ? undefined : v;
+      }
+      return el.value;
+    }
+
+    function collectPayload() {
+      const config = {};
+      for (const sec of SCHEMA.config) {
+        for (const f of sec.fields) {
+          const el = document.getElementById(fieldId("config", f.key));
+          const v = readValue(el, f.type);
+          if (v !== undefined) config[f.key] = v;
+        }
+      }
+      const index = {};
+      for (const s of meta.symbols) {
+        index[s] = {};
+        for (const sec of SCHEMA.index) {
+          for (const f of sec.fields) {
+            const el = document.getElementById(fieldId("index:" + s, f.key));
+            const v = readValue(el, f.type);
+            if (v !== undefined) index[s][f.key] = v;
+          }
+        }
+      }
+      return { config, index };
+    }
+
+    async function loadSettings() {
+      toast("loading…");
+      const res = await fetch("/api/settings");
+      if (!res.ok) throw new Error("load failed " + res.status);
+      const data = await res.json();
+      state = { config: data.config, index: data.index };
+      meta = data.meta || {};
+      buildUI();
+      toast("loaded", "ok");
+    }
+
+    async function saveSettings() {
+      toast("saving…");
+      document.getElementById("btnSave").disabled = true;
+      try {
+        const body = collectPayload();
+        const res = await fetch("/api/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok || data.status === "error") throw new Error(data.message || "save failed");
+        state = { config: data.config, index: data.index };
+        meta = data.meta || meta;
+        buildUI();
+        toast("saved · live", "ok");
+      } catch (e) {
+        toast(String(e.message || e), "err");
+      } finally {
+        document.getElementById("btnSave").disabled = false;
+      }
+    }
+
+    async function resetDefaults() {
+      if (!confirm("Reset all settings to code defaults and clear saved file?")) return;
+      toast("resetting…");
+      const res = await fetch("/api/settings/reset", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok || data.status === "error") {
+        toast(data.message || "reset failed", "err");
+        return;
+      }
+      state = { config: data.config, index: data.index };
+      meta = data.meta || {};
+      buildUI();
+      toast("defaults restored", "ok");
+    }
+
+    document.getElementById("btnReload").onclick = () => loadSettings().catch((e) => toast(String(e), "err"));
+    document.getElementById("btnSave").onclick = () => saveSettings();
+    document.getElementById("btnReset").onclick = () => resetDefaults().catch((e) => toast(String(e), "err"));
+    loadSettings().catch((e) => toast(String(e), "err"));
+  </script>
+</body>
+</html>

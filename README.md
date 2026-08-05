@@ -37,14 +37,30 @@ Keep `DRY_RUN=true` until you verify strikes/orders in logs.
 python3 iron_condor.py
 ```
 
-Webhook listens on `http://0.0.0.0:9000` (public: `https://delta.spotfixcrew.com`).
+Webhook listens on `http://0.0.0.0:9000` (public: `https://delta.spotopscrew.com`).
+
+## Settings UI
+
+Open **https://delta.spotopscrew.com/** (or `http://HOST:9000/`) for a live settings panel covering:
+
+- Global risk knobs (delta zones, BE buffers, TP %, day-PnL, TSL, clocks)
+- Per-symbol geometry (BTC / ETH / XAUT lot size, strikes, hedges, bias distances)
+
+Saves to `state/settings.json` and applies **live** to the running process (no restart for most knobs). API:
+
+```bash
+curl https://delta.spotopscrew.com/api/settings
+curl -X PUT https://delta.spotopscrew.com/api/settings \
+  -H 'Content-Type: application/json' \
+  -d '{"config":{"DELTA_ADJUST":0.5,"EXPIRY_DELTA_ADJUST":0.5}}'
+```
 
 ## Webhook
 
 Bias only:
 
 ```bash
-curl -X POST https://delta.spotfixcrew.com/iron \
+curl -X POST https://delta.spotopscrew.com/iron \
   -H 'Content-Type: application/json' \
   -d '{"symbol":"BTC","bias":"PE"}'
 ```
@@ -52,13 +68,13 @@ curl -X POST https://delta.spotfixcrew.com/iron \
 Enter iron condor (bot fetches live spot):
 
 ```bash
-curl -X POST https://delta.spotfixcrew.com/iron \
+curl -X POST https://delta.spotopscrew.com/iron \
   -H 'Content-Type: application/json' \
   -d '{"symbol":"BTC","bias":"NONE","enter":true}'
 ```
 
 ```bash
-curl -X POST https://delta.spotfixcrew.com/iron \
+curl -X POST https://delta.spotopscrew.com/iron \
   -H 'Content-Type: application/json' \
   -d '{"symbol":"ETH","bias":"CE","enter":true}'
 ```
@@ -66,8 +82,8 @@ curl -X POST https://delta.spotfixcrew.com/iron \
 Status:
 
 ```bash
-curl https://delta.spotfixcrew.com/positions
-curl https://delta.spotfixcrew.com/bias
+curl https://delta.spotopscrew.com/positions
+curl https://delta.spotopscrew.com/bias
 ```
 
 ## Per-symbol settings (`INDEX_CONFIG`)
