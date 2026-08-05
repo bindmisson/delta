@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#050505" />
-  <title>SpotFix IC</title>
+  <title>SpotFix Console</title>
   <link rel="icon" href="/static/logo.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -321,16 +321,16 @@
   <div id="view-login">
     <div class="login-wrap">
       <div class="login-hero">
-        <h1>Welcome to <span>SpotFix IC</span></h1>
-        <p>Sign in to monitor positions, set bias, enter or flatten iron condors, and manage live ops settings.</p>
-        <div class="hint-box">Operator access only. Strategy internals stay on the engine.</div>
+        <h1>Welcome to <span>SpotFix</span></h1>
+        <p>Sign in to your operator console.</p>
+        <div class="hint-box">Authorized operators only.</div>
       </div>
       <div class="login-card">
         <div class="brand-row">
           <img src="/static/logo.png" alt="SpotFix" />
           <div>
             <strong>SpotFixAlgo</strong>
-            <span>Iron Condor control</span>
+            <span>Operator console</span>
           </div>
         </div>
         <div id="loginErr" class="err hidden"></div>
@@ -355,7 +355,7 @@
       <div class="top-brand">
         <img src="/static/logo.png" alt="" />
         <div>
-          <strong>SpotFix IC</strong>
+          <strong>SpotFix</strong>
           <small id="userLabel">signed in</small>
         </div>
       </div>
@@ -384,8 +384,7 @@
         <div class="tabs" id="settingsTabs"></div>
         <div id="settingsPanels"></div>
         <p class="note">
-          API keys are write-only (leave blank to keep). Distances must be multiples of strike_step.
-          WEBHOOK_PORT changes need a process restart.
+          API keys are write-only (leave blank to keep). WEBHOOK_PORT changes need a process restart.
         </p>
       </section>
     </main>
@@ -451,23 +450,15 @@
       ],
       index: [
         {
-          title: "Size & geometry",
+          title: "Size",
           fields: [
             { key: "lot_size", type: "number", step: 1 },
-            { key: "strike_step", type: "number", step: 1, hint: "Strike grid step" },
-            { key: "ce_distance", type: "number", step: 1, hint: "Multiple of strike_step" },
-            { key: "pe_distance", type: "number", step: 1, hint: "Multiple of strike_step" },
-            { key: "hedge_distance", type: "number", step: 1, hint: "Must be a multiple of strike_step" },
-            { key: "CE_BIAS_CE_DISTANCE", type: "number", step: 1, hint: "Multiple of strike_step" },
-            { key: "CE_BIAS_PE_DISTANCE", type: "number", step: 1, hint: "Multiple of strike_step" },
-            { key: "PE_BIAS_CE_DISTANCE", type: "number", step: 1, hint: "Multiple of strike_step" },
-            { key: "PE_BIAS_PE_DISTANCE", type: "number", step: 1, hint: "Multiple of strike_step" },
           ],
         },
         {
           title: "Clocks (IST)",
           fields: [
-            { key: "underlying_symbol", type: "text" },
+            { key: "underlying_symbol", type: "text", label: "Market symbol" },
             { key: "settlement_time", type: "text" },
             { key: "market_start", type: "text" },
             { key: "market_end", type: "text" },
@@ -478,10 +469,10 @@
         {
           title: "Risk / exits",
           fields: [
-            { key: "be_buffer", type: "number", step: 1 },
-            { key: "expiry_be_buffer", type: "number", step: 1 },
-            { key: "profit_target_percent", type: "number", step: 1 },
-            { key: "expiry_profit_target_percent", type: "number", step: 1 },
+            { key: "be_buffer", type: "number", step: 1, label: "Buffer" },
+            { key: "expiry_be_buffer", type: "number", step: 1, label: "Expiry buffer" },
+            { key: "profit_target_percent", type: "number", step: 1, label: "Target %" },
+            { key: "expiry_profit_target_percent", type: "number", step: 1, label: "Expiry target %" },
             { key: "day_pnl_base", type: "number", step: 0.5 },
             { key: "tsl_start", type: "number", step: 1 },
             { key: "tsl_lock", type: "number", step: 1 },
@@ -490,11 +481,6 @@
         },
       ],
     };
-    const DISTANCE_KEYS = [
-      "ce_distance", "pe_distance", "hedge_distance",
-      "CE_BIAS_CE_DISTANCE", "CE_BIAS_PE_DISTANCE",
-      "PE_BIAS_CE_DISTANCE", "PE_BIAS_PE_DISTANCE",
-    ];
 
     let settingsState = null;
     let settingsMeta = null;
@@ -617,32 +603,15 @@
           <div class="stat"><label>Engine</label><strong class="live">ONLINE</strong></div>
         `;
         $("symbolCards").innerHTML = Object.entries(syms).map(([sym, s]) => {
-          const legs = s.legs || {};
-          const legLines = ["ce_short", "pe_short", "ce_buy", "pe_buy"]
-            .map((k) => {
-              const L = legs[k];
-              if (!L || !L.symbol) return null;
-              return `${k}: ${L.symbol}`;
-            })
-            .filter(Boolean)
-            .join("<br>");
           return `<div class="card" data-sym="${sym}">
             <h3>${sym} <span class="badge ${s.active ? "on" : "off"}">${s.active ? "ACTIVE" : "FLAT"}</span></h3>
             <div class="meta">
-              spot ${s.spot != null ? Number(s.spot).toFixed(2) : "—"} · bias ${s.bias || "NONE"} · expiry ${s.expiry || "—"} · lots ${s.lot_size ?? "—"}
-              ${s.active ? `<br>credit ${s.entry_credit ?? "—"} · BE ${s.lower_be ?? "—"} / ${s.upper_be ?? "—"} · adj ${s.adjustments || 0}` : ""}
+              spot ${s.spot != null ? Number(s.spot).toFixed(2) : "—"} · size ${s.lot_size ?? "—"}
             </div>
-            ${s.active && legLines ? `<div class="legs">${legLines}</div>` : ""}
             <div class="row">
-              <select class="grow" id="bias-${sym}">
-                <option value="NONE" ${s.bias === "NONE" ? "selected" : ""}>NONE</option>
-                <option value="CE" ${s.bias === "CE" ? "selected" : ""}>CE</option>
-                <option value="PE" ${s.bias === "PE" ? "selected" : ""}>PE</option>
-              </select>
-              <input class="grow" id="qty-${sym}" type="number" min="1" step="1" value="${s.lot_size || 1}" title="contracts" />
+              <input class="grow" id="qty-${sym}" type="number" min="1" step="1" value="${s.lot_size || 1}" title="size" />
             </div>
             <div class="row" style="margin-top:8px">
-              <button type="button" data-act="bias" data-sym="${sym}">Set bias</button>
               <button type="button" class="primary" data-act="enter" data-sym="${sym}">Enter</button>
               <button type="button" class="danger" data-act="close" data-sym="${sym}" ${s.active ? "" : "disabled"}>Close</button>
             </div>
@@ -654,22 +623,17 @@
           if (!btn) return;
           const sym = btn.dataset.sym;
           const act = btn.dataset.act;
-          const bias = $(`bias-${sym}`).value;
           const qty = Number($(`qty-${sym}`).value);
           btn.disabled = true;
           try {
-            if (act === "bias") {
-              const { data: d } = await api("/api/bias", { method: "POST", body: JSON.stringify({ symbol: sym, bias }) });
-              if (d.status === "error") throw new Error(d.message);
-              toast(`${sym} bias ${d.bias}`, "ok");
-            } else if (act === "enter") {
-              if (!confirm(`Enter ${sym} iron condor? bias=${bias} qty=${qty}`)) return;
+            if (act === "enter") {
+              if (!confirm(`Open ${sym} position? size=${qty}`)) return;
               const { data: d } = await api("/api/enter", {
                 method: "POST",
-                body: JSON.stringify({ symbol: sym, bias, contracts: qty }),
+                body: JSON.stringify({ symbol: sym, contracts: qty }),
               });
               if (d.status === "error") throw new Error(d.message);
-              toast(`${sym} entered`, "ok");
+              toast(`${sym} opened`, "ok");
             } else if (act === "close") {
               if (!confirm(`Close ${sym} position?`)) return;
               const { data: d } = await api("/api/close", { method: "POST", body: JSON.stringify({ symbol: sym }) });
@@ -769,16 +733,6 @@
           for (const f of sec.fields) {
             const v = readValue($(fieldId("index:" + s, f.key)), f.type);
             if (v !== undefined) index[s][f.key] = v;
-          }
-        }
-        const step = Number(index[s].strike_step);
-        if (Number.isFinite(step) && step > 0) {
-          for (const key of DISTANCE_KEYS) {
-            if (index[s][key] == null) continue;
-            const val = Number(index[s][key]);
-            if (Number.isFinite(val) && val % step !== 0) {
-              throw new Error(`${s}.${key}=${val} must be a multiple of strike_step=${step}`);
-            }
           }
         }
       }

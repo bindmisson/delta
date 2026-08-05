@@ -399,6 +399,24 @@ INDEX_SETTING_KEYS = [
     "startup_delay",
 ]
 
+# Geometry / structure — never exposed on UI API (even when logged in)
+STRATEGY_INDEX_KEYS = {
+    "exchange",
+    "strike_step",
+    "expiry_day",
+    "ce_distance",
+    "pe_distance",
+    "CE_BIAS_CE_DISTANCE",
+    "CE_BIAS_PE_DISTANCE",
+    "PE_BIAS_CE_DISTANCE",
+    "PE_BIAS_PE_DISTANCE",
+    "hedge_distance",
+}
+
+PUBLIC_INDEX_SETTING_KEYS = [
+    k for k in INDEX_SETTING_KEYS if k not in STRATEGY_INDEX_KEYS
+]
+
 INDEX_DISTANCE_KEYS = (
     "ce_distance",
     "pe_distance",
@@ -653,6 +671,9 @@ def snapshot_settings(mask_secrets=True, public=False):
     keys = (
         PUBLIC_CONFIG_SETTING_KEYS if public else CONFIG_SETTING_KEYS
     )
+    index_keys = (
+        PUBLIC_INDEX_SETTING_KEYS if public else INDEX_SETTING_KEYS
+    )
     config = {k: CONFIG.get(k) for k in keys if k in CONFIG}
     if mask_secrets:
         for k in CONFIG_SECRET_KEYS:
@@ -665,7 +686,7 @@ def snapshot_settings(mask_secrets=True, public=False):
     index = {}
     for symbol, cfg in INDEX_CONFIG.items():
         index[symbol] = {
-            k: cfg.get(k) for k in INDEX_SETTING_KEYS if k in cfg
+            k: cfg.get(k) for k in index_keys if k in cfg
         }
     meta = {
         "path": str(SETTINGS_PATH),
@@ -725,6 +746,8 @@ def apply_settings_payload(payload, persist=True, allow_strategy=True):
             staged_index[symbol] = {}
             for key, raw in patch.items():
                 if key not in INDEX_SETTING_KEYS:
+                    continue
+                if not allow_strategy and key in STRATEGY_INDEX_KEYS:
                     continue
                 if key not in INDEX_CONFIG[symbol]:
                     continue
@@ -4586,10 +4609,8 @@ def iron(payload: dict):
         return {
             "status": "success",
             "entered": True,
-            "bias": bias,
             "spot": spot,
             "contracts": POSITIONS[symbol].get("lot_size"),
-            "position": public_sanitize(POSITIONS[symbol]),
         }
 
     except Exception as e:
@@ -4607,7 +4628,17 @@ def iron(payload: dict):
 
 @app.get("/positions")
 def positions():
-    return public_sanitize(POSITIONS)
+    """Logged-in status only — no leg / structure payload."""
+    out = {}
+    for symbol, pos in POSITIONS.items():
+        if not isinstance(pos, dict):
+            continue
+        out[symbol] = {
+            "active": bool(pos.get("active")),
+            "lot_size": pos.get("lot_size"),
+            "spot": pos.get("spot"),
+        }
+    return out
 
 
 @app.get("/bias")
@@ -4738,7 +4769,7 @@ def auth_logout(request: Request):
 
 @app.get("/api/dashboard")
 def api_dashboard():
-    """Operator overview — no greek / strategy fields."""
+    """Operator overview — status only, no structure / strategy fields."""
     symbols = {}
     for symbol in INDEX_CONFIG:
         pos = POSITIONS.get(symbol) or {}
@@ -4748,25 +4779,14 @@ def api_dashboard():
             spot = get_live_spot(symbol)
         except Exception:
             spot = None
-        legs = {}
-        if active:
-            for name in ("ce_short", "pe_short", "ce_buy", "pe_buy"):
-                leg = pos.get(name) or {}
-                legs[name] = {
-                    "symbol": leg.get("symbol"),
-                    "strike": leg.get("strike"),
-                }
         symbols[symbol] = {
             "active": active,
-            "bias": get_current_bias(symbol),
-            "spot": spot,
-            "expiry": pos.get("expiry") if active else get_active_expiry(symbol),
-            "lot_size": pos.get("lot_size") if active else INDEX_CONFIG[symbol].get("lot_size"),
-            "entry_credit": pos.get("entry_credit") if active else None,
-            "upper_be": pos.get("upper_be") if active else None,
-            "lower_be": pos.get("lower_be") if active else None,
-            "adjustments": pos.get("adjustments") if active else 0,
-            "legs": legs,
+            "spot": round(float(spot), 2) if spot is not None else None,
+            "lot_size": (
+                pos.get("lot_size")
+                if active
+                else INDEX_CONFIG[symbol].get("lot_size")
+            ),
         }
     return {
         "status": "ok",
@@ -4781,9 +4801,8 @@ def api_enter(payload: dict):
     symbol = str(payload.get("symbol") or "").upper()
     if symbol not in INDEX_CONFIG:
         return {"status": "error", "message": "INVALID SYMBOL"}
-    bias = set_current_bias(
-        symbol, payload.get("bias", "NONE"), source="ui"
-    )
+    # UI never sets strategy tilt — always neutral engine bias
+    bias = set_current_bias(symbol, "NONE", source="ui")
     qty_raw = payload.get("contracts", payload.get("qty"))
     quantity = None
     if qty_raw is not None:
@@ -4802,10 +4821,8 @@ def api_enter(payload: dict):
     return {
         "status": "ok",
         "entered": True,
-        "bias": bias,
         "spot": spot,
         "contracts": POSITIONS[symbol].get("lot_size"),
-        "position": public_sanitize(POSITIONS[symbol]),
     }
 
 
