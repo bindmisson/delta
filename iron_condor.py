@@ -165,14 +165,14 @@ INDEX_CONFIG = {
         "market_start": "00:05",
         "market_end": "17:25",
         "expiry_switch_time": "12:55",
-        # Wing geometry
-        "ce_distance": 400,
-        "pe_distance": 400,
-        "CE_BIAS_CE_DISTANCE": 600,
-        "CE_BIAS_PE_DISTANCE": 200,
-        "PE_BIAS_CE_DISTANCE": 200,
-        "PE_BIAS_PE_DISTANCE": 600,
-        "hedge_distance": 2000,
+        # Short CE+PE both at nearest 200 ATM; hedges ±1000
+        "ce_distance": 0,
+        "pe_distance": 0,
+        "CE_BIAS_CE_DISTANCE": 0,
+        "CE_BIAS_PE_DISTANCE": 0,
+        "PE_BIAS_CE_DISTANCE": 0,
+        "PE_BIAS_PE_DISTANCE": 0,
+        "hedge_distance": 1000,
         # Risk / exits
         "be_buffer": 150,
         "expiry_be_buffer": 250,
@@ -1595,20 +1595,27 @@ def create_condor(symbol, bias, spot, expiry=None, quantity=None):
             "PE_BIAS_PE_DISTANCE"
         ]
 
+    # distance 0 → both shorts on same nearest ATM (multiple of strike_step)
+    short_prefer_ce = "nearest" if ce_distance == 0 else "up"
+    short_prefer_pe = "nearest" if pe_distance == 0 else "down"
+
     ce_short_strike = snap_strike(
         symbol,
         expiry,
         atm + ce_distance,
-        prefer="up",
+        prefer=short_prefer_ce,
         option_type="CE",
     )
     pe_short_strike = snap_strike(
         symbol,
         expiry,
         atm - pe_distance,
-        prefer="down",
+        prefer=short_prefer_pe,
         option_type="PE",
     )
+    if ce_distance == 0 and pe_distance == 0:
+        # Force identical ATM short strikes
+        pe_short_strike = ce_short_strike
 
     ce_buy_strike = snap_strike(
         symbol,
