@@ -165,12 +165,14 @@ CONFIG = {
     "MARKET_END": "17:25",
 
     "WEBHOOK_PORT": int(os.getenv("WEBHOOK_PORT", "9000")),
+    # Bind localhost only — nginx terminates TLS publicly
+    "BIND_HOST": os.getenv("BIND_HOST", "127.0.0.1"),
 
     # UI auth (SpotFix-style dashboard)
     "UI_USERNAME": os.getenv("UI_USERNAME", "admin"),
     "UI_PASSWORD": os.getenv("UI_PASSWORD", ""),
     "UI_SESSION_HOURS": float(os.getenv("UI_SESSION_HOURS", "12")),
-    # Optional shared secret for /iron webhook (header X-Webhook-Token)
+    # Required for unauthenticated /iron webhook (header X-Webhook-Token)
     "WEBHOOK_TOKEN": os.getenv("WEBHOOK_TOKEN", ""),
 }
 
@@ -503,13 +505,12 @@ def request_authorized(request: Request) -> bool:
 
 
 class UIAuthMiddleware(BaseHTTPMiddleware):
-    """Protect operator APIs; leave webhook + static + login public."""
+    """Protect operator APIs. Login page public; strategy APIs require session."""
 
     PUBLIC_EXACT = {
         "/",
         "/ui",
         "/favicon.ico",
-        "/health",
         "/api/auth/login",
         "/api/auth/status",
         "/api/auth/logout",
@@ -522,21 +523,28 @@ class UIAuthMiddleware(BaseHTTPMiddleware):
         if path in self.PUBLIC_EXACT or path.startswith(self.PUBLIC_PREFIX):
             return await call_next(request)
 
-        # TradingView / automation webhook
+        # Minimal public health — no strategy details
+        if path == "/health":
+            if request_authorized(request):
+                return await call_next(request)
+            return JSONResponse({"status": "ok"})
+
+        # /iron: session cookie OR matching WEBHOOK_TOKEN (never open)
         if path == "/iron":
-            token = CONFIG.get("WEBHOOK_TOKEN") or ""
-            if token:
-                got = (
-                    request.headers.get("X-Webhook-Token")
-                    or request.query_params.get("token")
-                    or ""
-                )
-                if not secrets.compare_digest(str(got), str(token)):
-                    return JSONResponse(
-                        {"status": "error", "message": "UNAUTHORIZED"},
-                        status_code=401,
-                    )
-            return await call_next(request)
+            if request_authorized(request):
+                return await call_next(request)
+            token = str(CONFIG.get("WEBHOOK_TOKEN") or "")
+            got = (
+                request.headers.get("X-Webhook-Token")
+                or request.query_params.get("token")
+                or ""
+            )
+            if token and secrets.compare_digest(str(got), token):
+                return await call_next(request)
+            return JSONResponse(
+                {"status": "error", "message": "UNAUTHORIZED"},
+                status_code=401,
+            )
 
         # Everything else under /api, /positions, /bias needs session
         needs_auth = (
@@ -4920,6 +4928,6 @@ if __name__ == "__main__":
 
     uvicorn.run(
         app,
-        host="0.0.0.0",
+        host=CONFIG.get("BIND_HOST", "127.0.0.1"),
         port=CONFIG.get("WEBHOOK_PORT", 9000),
     )

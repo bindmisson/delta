@@ -53,7 +53,8 @@ UI_USERNAME=admin
 UI_PASSWORD=your-strong-password
 ```
 
-Strategy engine knobs are not exposed. Session cookie auth protects `/api/*`, `/positions`, `/bias`. `POST /iron` stays open for webhooks (optional `WEBHOOK_TOKEN`).
+Strategy engine knobs are not exposed. Session cookie auth protects `/api/*`, `/positions`, `/bias`, and detailed `/health`.  
+`POST /iron` requires login **or** `WEBHOOK_TOKEN` (`X-Webhook-Token` header). Engine binds to `127.0.0.1` only (nginx on 443).
 
 ## Webhook
 
